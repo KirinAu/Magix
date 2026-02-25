@@ -67,8 +67,9 @@ app.post("/api/chat/start", (req, res) => {
   const agent = createAnimationAgent(config, res);
   sessions.set(sessionId, agent);
 
-  // 发送 session_ready 事件
+  // 发送 session_ready 事件后关闭连接（sessionId 已通过事件传递）
   sendSSE(res, { type: "session_ready", sessionId });
+  res.end();
 });
 
 /**
