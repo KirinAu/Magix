@@ -57,18 +57,16 @@ const TIME_HIJACK_SCRIPT = `
 const GSAP_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>`;
 const ANIME_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
 <script>
-  // 包装 anime，自动收集实例
-  document.addEventListener('DOMContentLoaded', () => {
-    if (window.anime) {
-      const _anime = window.anime;
-      window.anime = function(params) {
-        const instance = _anime({ ...params, autoplay: false });
-        window.__animeInstances.push(instance);
-        return instance;
-      };
-      Object.assign(window.anime, _anime);
-    }
-  });
+  // 立即包装 anime，确保用户代码调用时已经是包装版本
+  (function() {
+    const _anime = window.anime;
+    window.anime = function(params) {
+      const instance = _anime({ ...params, autoplay: false });
+      window.__animeInstances.push(instance);
+      return instance;
+    };
+    Object.assign(window.anime, _anime);
+  })();
 </script>`;
 
 function detectLibrary(code: string): "gsap" | "anime" {

@@ -82,6 +82,10 @@ export async function sendMessage(
   return close;
 }
 
+export async function abortSession(sessionId: string): Promise<void> {
+  await fetch(`${BACKEND}/api/chat/${sessionId}/abort`, { method: "POST" }).catch(() => {});
+}
+
 export async function submitRender(params: {
   code: string;
   library: string;

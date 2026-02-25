@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import type { ChatMessage, LLMConfig } from "@/lib/types";
-import { startSession, sendMessage } from "@/lib/api";
+import { startSession, sendMessage, abortSession } from "@/lib/api";
 
 interface ChatPanelProps {
   onCodeUpdate: (code: string, library: string) => void;
@@ -114,6 +114,22 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
     sessionIdRef.current = sessionId;
   }
 
+  async function handleAbort() {
+    if (!sessionIdRef.current) return;
+    await abortSession(sessionIdRef.current);
+    setIsStreaming(false);
+    setToolStatus(null);
+    const text = assistantTextRef.current.trim();
+    assistantTextRef.current = "";
+    setAssistantText("");
+    if (text) {
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now().toString(), role: "assistant", content: text, timestamp: Date.now() },
+      ]);
+    }
+  }
+
   async function handleSend() {
     if (!input.trim() || isStreaming || !llmConfig) return;
 
@@ -218,6 +234,14 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
           >
             发送
           </button>
+          {isStreaming && (
+            <button
+              onClick={handleAbort}
+              className="rounded-xl bg-red-500 text-white px-4 py-2.5 text-sm font-medium hover:bg-red-600 transition-colors"
+            >
+              停止
+            </button>
+          )}
         </div>
       </div>
     </div>

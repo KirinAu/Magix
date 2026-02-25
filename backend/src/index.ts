@@ -121,6 +121,17 @@ app.delete("/api/chat/:sessionId", (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * POST /api/chat/:sessionId/abort
+ * 中止当前正在运行的 agent
+ */
+app.post("/api/chat/:sessionId/abort", (req, res) => {
+  const agent = sessions.get(req.params.sessionId);
+  if (!agent) { res.status(404).json({ error: "Session not found" }); return; }
+  agent.abort();
+  res.json({ ok: true });
+});
+
 // ─── 渲染 ─────────────────────────────────────────────────────────────────────
 
 interface RenderJob {
