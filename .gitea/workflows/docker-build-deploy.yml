@@ -29,7 +29,7 @@ jobs:
       namespace: ${{ steps.cfg.outputs.namespace }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: https://github.com/actions/checkout@v4
 
       - name: Resolve registry config
         id: cfg
@@ -202,7 +202,7 @@ jobs:
     needs: build-and-push
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: https://github.com/actions/checkout@v4
 
       - name: Ensure deploy env exists
         env:
