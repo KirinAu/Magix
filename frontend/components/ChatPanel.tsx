@@ -9,35 +9,14 @@ interface ChatPanelProps {
   llmConfig: LLMConfig | null;
 }
 
-// 从不完整的 JSON 字符串里尝试提取 code 字段（流式增量）
-function tryExtractCode(raw: string): { code: string; library?: string } | null {
-  // 尝试完整解析
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed.code) return parsed;
-  } catch {}
-
-  // 尝试提取 code 字段的部分内容（流式中）
-  const match = raw.match(/"code"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
-  if (match) {
-    try {
-      const code = JSON.parse(`"${match[1]}"`);
-      const libMatch = raw.match(/"library"\s*:\s*"(gsap|anime)"/);
-      return { code, library: libMatch?.[1] };
-    } catch {}
-  }
-  return null;
-}
-
 export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [assistantText, setAssistantText] = useState("");
+  const [toolStatus, setToolStatus] = useState<string | null>(null);
 
   const sessionIdRef = useRef<string | null>(null);
-  const toolcallArgBufferRef = useRef<string>("");
-  const currentToolNameRef = useRef<string>("");
   const assistantTextRef = useRef<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -56,8 +35,13 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
     if (type === "agent_start") {
       setIsStreaming(true);
       setAssistantText("");
+      setToolStatus(null);
       assistantTextRef.current = "";
-      toolcallArgBufferRef.current = "";
+      return;
+    }
+
+    if (type === "code_update") {
+      onCodeUpdate(event.code, event.library ?? "gsap");
       return;
     }
 
@@ -77,27 +61,17 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
             .reverse()
             .find((c: any) => c.type === "toolCall");
           if (lastToolCall) {
-            currentToolNameRef.current = lastToolCall.name;
-            toolcallArgBufferRef.current = "";
+            if (lastToolCall.name === "write_code") {
+              setToolStatus("正在生成代码...");
+            } else if (lastToolCall.name === "str_replace") {
+              setToolStatus("正在修改代码...");
+            }
           }
         }
       }
 
-      if (ae.type === "toolcall_delta" && currentToolNameRef.current === "write_code") {
-        toolcallArgBufferRef.current += ae.delta;
-        const extracted = tryExtractCode(toolcallArgBufferRef.current);
-        if (extracted) {
-          onCodeUpdate(extracted.code, extracted.library ?? "gsap");
-        }
-      }
-
       if (ae.type === "toolcall_end") {
-        const toolCall = ae.toolCall;
-        if (toolCall?.name === "write_code" && toolCall.arguments?.code) {
-          onCodeUpdate(toolCall.arguments.code, toolCall.arguments.library ?? "gsap");
-        }
-        currentToolNameRef.current = "";
-        toolcallArgBufferRef.current = "";
+        setToolStatus(null);
       }
     }
 
@@ -173,7 +147,16 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
           </div>
         )}
 
-        {isStreaming && !assistantText && (
+        {isStreaming && toolStatus && (
+          <div className="flex justify-start">
+            <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm px-4 py-2.5 bg-gray-50 border border-gray-100">
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-pulse" />
+              <span className="text-xs text-gray-500">{toolStatus}</span>
+            </div>
+          </div>
+        )}
+
+        {isStreaming && !assistantText && !toolStatus && (
           <div className="flex justify-start">
             <div className="rounded-2xl rounded-bl-sm px-4 py-3 bg-gray-100">
               <div className="flex gap-1 items-center">

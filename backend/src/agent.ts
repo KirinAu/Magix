@@ -12,22 +12,35 @@ export interface LLMConfig {
 }
 
 const SYSTEM_PROMPT = `You are an expert animation developer specializing in GSAP and Anime.js.
-Your job is to write high-quality, creative animation code that runs in a browser sandbox.
+Your job is to write high-quality, creative animation code that runs in a browser sandbox (1280x720px, black background).
 
-Rules:
-- Always use the write_code tool to output your animation code
-- The code runs inside a <script> tag in an HTML page that already has GSAP or Anime.js loaded
-- Do NOT include <script> tags, HTML, or import statements
-- The page has a black background (${`width`} x ${`height`} px), use the full canvas
-- For GSAP: create elements dynamically or use existing DOM, then animate with gsap.to/from/timeline
-- For Anime.js: create elements and use anime() — instances are auto-collected for seeking
-- Make animations that loop or have a clear duration
-- Be creative with colors, shapes, and motion
+## Environment
+- The code runs inside a <script> tag. GSAP or Anime.js is already loaded globally.
+- Do NOT include <script> tags, HTML, or import statements.
+- For GSAP: create DOM elements dynamically, animate with gsap.to/from/timeline/fromTo.
+- For Anime.js: create elements and use anime() — instances are auto-collected for time-seeking.
+- Animations must loop (repeat: -1) or have a clear total duration.
 
-When the user asks for changes, update the full code and call write_code again.`;
+## Tools
+You have two code tools:
+
+### write_code(code, library, description)
+Use for: initial generation, or when changes are large enough that a full rewrite is cleaner.
+
+### str_replace(old_str, new_str, description)
+Use for: targeted edits — changing a color, tweaking a value, fixing a bug.
+- old_str must match EXACTLY (including whitespace) a unique substring of the current code.
+- new_str is the replacement.
+- Prefer this over write_code when the change is small.
+
+## Workflow
+1. Think about what the user wants.
+2. Write or edit the code using the appropriate tool.
+3. Explain briefly what you did and why.
+
+Always produce complete, runnable code. Be creative with colors, shapes, and motion.`;
 
 function buildModel(config: LLMConfig): Model<any> {
-  // Determine API type based on provider
   const isAnthropic = config.provider === "anthropic";
   const api = isAnthropic ? "anthropic-messages" : "openai-completions";
 
@@ -49,13 +62,15 @@ function buildModel(config: LLMConfig): Model<any> {
 
 export function createAnimationAgent(
   config: LLMConfig,
-  res: Response  // SSE response object
+  res: Response
 ): Agent {
-  // Tool: write_code — streams code back to frontend via SSE
+  // 维护当前代码状态（session 级别）
+  let currentCode = "";
+
   const writeCodeTool: AgentTool<any> = {
     name: "write_code",
     label: "Write Animation Code",
-    description: "Output the complete animation code. Call this whenever you produce or update animation code.",
+    description: "Output the complete animation code. Use for initial generation or full rewrites.",
     parameters: Type.Object({
       code: Type.String({ description: "Complete animation JavaScript code" }),
       library: Type.Union(
@@ -65,10 +80,55 @@ export function createAnimationAgent(
       description: Type.String({ description: "Brief description of what this animation does" }),
     }),
     execute: async (_toolCallId, params) => {
-      // Tool execution is a no-op — the actual streaming happens via message_update events
+      currentCode = params.code;
+      // 通知前端完整代码（toolcall_delta 已经流式更新了，这里做最终确认）
+      sendSSE(res, {
+        type: "code_update",
+        code: params.code,
+        library: params.library,
+        mode: "full",
+      });
       return {
-        content: [{ type: "text" as const, text: `Code written: ${params.description}` }],
+        content: [{ type: "text" as const, text: `Code written (${params.code.split("\n").length} lines): ${params.description}` }],
         details: params,
+      };
+    },
+  };
+
+  const strReplaceTool: AgentTool<any> = {
+    name: "str_replace",
+    label: "Edit Code",
+    description: "Replace an exact substring in the current code. Use for targeted edits.",
+    parameters: Type.Object({
+      old_str: Type.String({ description: "Exact string to find and replace (must be unique in the code)" }),
+      new_str: Type.String({ description: "Replacement string" }),
+      description: Type.String({ description: "Brief description of what this change does" }),
+    }),
+    execute: async (_toolCallId, params) => {
+      if (!currentCode) {
+        throw new Error("No code exists yet. Use write_code first.");
+      }
+
+      const count = currentCode.split(params.old_str).length - 1;
+      if (count === 0) {
+        throw new Error(`old_str not found in current code. Make sure it matches exactly.`);
+      }
+      if (count > 1) {
+        throw new Error(`old_str matches ${count} times. Provide a more unique string.`);
+      }
+
+      currentCode = currentCode.replace(params.old_str, params.new_str);
+
+      sendSSE(res, {
+        type: "code_update",
+        code: currentCode,
+        library: "gsap", // 保持当前库不变
+        mode: "patch",
+      });
+
+      return {
+        content: [{ type: "text" as const, text: `Applied edit: ${params.description}` }],
+        details: { ...params, resultCode: currentCode },
       };
     },
   };
@@ -79,12 +139,11 @@ export function createAnimationAgent(
     initialState: {
       systemPrompt: SYSTEM_PROMPT,
       model,
-      tools: [writeCodeTool],
+      tools: [writeCodeTool, strReplaceTool],
     },
     getApiKey: () => config.apiKey,
   });
 
-  // Subscribe and forward all events to SSE
   agent.subscribe((event: AgentEvent) => {
     sendSSE(res, event);
   });
