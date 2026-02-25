@@ -183,6 +183,17 @@ export function createAnimationAgent(
   });
 
   agent.subscribe((event: AgentEvent) => {
+    // 如果是错误结束，提取错误信息发给前端
+    if (event.type === "agent_end") {
+      const lastMsg = event.messages[event.messages.length - 1] as any;
+      if (lastMsg?.stopReason === "error") {
+        const errText = lastMsg.content
+          ?.filter((c: any) => c.type === "text")
+          .map((c: any) => c.text)
+          .join("") || "请求失败";
+        sendSSE(res, { type: "error", message: errText });
+      }
+    }
     sendSSE(res, event);
     if (event.type === "agent_end" && !res.writableEnded) {
       res.end();
