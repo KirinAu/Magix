@@ -153,6 +153,14 @@ jobs:
             ./frontend
           docker push "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend-deps:${{ steps.deps.outputs.frontend_deps_hash }}"
 
+      - name: Pull backend cache image (optional)
+        if: ${{ steps.changes.outputs.backend_changed == 'true' }}
+        run: docker pull "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:latest" || true
+
+      - name: Pull frontend cache image (optional)
+        if: ${{ steps.changes.outputs.frontend_changed == 'true' }}
+        run: docker pull "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:latest" || true
+
       - name: Build backend image
         if: ${{ steps.changes.outputs.backend_changed == 'true' }}
         run: |
@@ -162,7 +170,8 @@ jobs:
             cp -a docs/. backend/docs/
           fi
 
-          docker build --provenance=false --no-cache \
+          docker build --provenance=false \
+            --cache-from "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:latest" \
             -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:latest" \
             -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:${{ steps.meta.outputs.build_tag }}" \
             ./backend
@@ -170,7 +179,8 @@ jobs:
       - name: Build frontend image
         if: ${{ steps.changes.outputs.frontend_changed == 'true' }}
         run: |
-          docker build --provenance=false --no-cache \
+          docker build --provenance=false \
+            --cache-from "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:latest" \
             -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:latest" \
             -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:${{ steps.meta.outputs.build_tag }}" \
             ./frontend
