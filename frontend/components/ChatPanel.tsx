@@ -75,17 +75,25 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
       }
     }
 
-    if (type === "agent_end") {
-      const text = assistantTextRef.current;
-      setIsStreaming(false);
-      setAssistantText("");
+    if (type === "turn_end") {
+      const text = assistantTextRef.current.trim();
       assistantTextRef.current = "";
-      if (text.trim()) {
+      setAssistantText("");
+      if (text) {
         setMessages((prev) => [
           ...prev,
           { id: Date.now().toString(), role: "assistant", content: text, timestamp: Date.now() },
         ]);
       }
+      return;
+    }
+
+    if (type === "agent_end") {
+      // 兜底：turn_end 已经处理了，这里只负责收尾状态
+      setIsStreaming(false);
+      setAssistantText("");
+      assistantTextRef.current = "";
+      return;
     }
   }
 
