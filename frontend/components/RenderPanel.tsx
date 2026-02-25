@@ -7,23 +7,20 @@ import { submitRender, watchRenderJob, getDownloadUrl } from "@/lib/api";
 interface RenderPanelProps {
   code: string;
   library: string;
+  params: RenderParams;
+  onParamsChange: (params: RenderParams) => void;
   onRenderDone?: (jobId: string) => void;
 }
 
 const PRESETS = [
-  { label: "720p 30fps", width: 1280, height: 720, fps: 30 },
+  { label: "720p 30fps",  width: 1280, height: 720,  fps: 30 },
   { label: "1080p 30fps", width: 1920, height: 1080, fps: 30 },
   { label: "1080p 60fps", width: 1920, height: 1080, fps: 60 },
+  { label: "4K 30fps",    width: 3840, height: 2160, fps: 30 },
   { label: "Square 1:1", width: 1080, height: 1080, fps: 30 },
 ];
 
-export default function RenderPanel({ code, library, onRenderDone }: RenderPanelProps) {
-  const [params, setParams] = useState<RenderParams>({
-    fps: 30,
-    duration: 3,
-    width: 1280,
-    height: 720,
-  });
+export default function RenderPanel({ code, library, params, onParamsChange, onRenderDone }: RenderPanelProps) {
   const [job, setJob] = useState<RenderJob | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -75,7 +72,7 @@ export default function RenderPanel({ code, library, onRenderDone }: RenderPanel
             {PRESETS.map((p) => (
               <button
                 key={p.label}
-                onClick={() => setParams((prev) => ({ ...prev, width: p.width, height: p.height, fps: p.fps }))}
+                onClick={() => onParamsChange({ ...params, width: p.width, height: p.height, fps: p.fps })}
                 className={`rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
                   params.width === p.width && params.height === p.height && params.fps === p.fps
                     ? "bg-gray-900 text-white"
@@ -98,7 +95,7 @@ export default function RenderPanel({ code, library, onRenderDone }: RenderPanel
               <input
                 type="number"
                 value={params.width}
-                onChange={(e) => setParams((p) => ({ ...p, width: Number(e.target.value) }))}
+                onChange={(e) => onParamsChange({ ...params, width: Number(e.target.value) })}
                 className="mt-1 w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-200"
               />
             </label>
@@ -107,7 +104,7 @@ export default function RenderPanel({ code, library, onRenderDone }: RenderPanel
               <input
                 type="number"
                 value={params.height}
-                onChange={(e) => setParams((p) => ({ ...p, height: Number(e.target.value) }))}
+                onChange={(e) => onParamsChange({ ...params, height: Number(e.target.value) })}
                 className="mt-1 w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-200"
               />
             </label>
@@ -121,7 +118,7 @@ export default function RenderPanel({ code, library, onRenderDone }: RenderPanel
                 value={params.fps}
                 min={1}
                 max={120}
-                onChange={(e) => setParams((p) => ({ ...p, fps: Number(e.target.value) }))}
+                onChange={(e) => onParamsChange({ ...params, fps: Number(e.target.value) })}
                 className="mt-1 w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-200"
               />
             </label>
@@ -132,7 +129,7 @@ export default function RenderPanel({ code, library, onRenderDone }: RenderPanel
                 value={params.duration}
                 min={0.1}
                 step={0.5}
-                onChange={(e) => setParams((p) => ({ ...p, duration: Number(e.target.value) }))}
+                onChange={(e) => onParamsChange({ ...params, duration: Number(e.target.value) })}
                 className="mt-1 w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-200"
               />
             </label>

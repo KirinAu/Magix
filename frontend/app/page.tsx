@@ -5,7 +5,7 @@ import CodePreviewPanel from "@/components/CodePreviewPanel";
 import ChatPanel from "@/components/ChatPanel";
 import RenderPanel from "@/components/RenderPanel";
 import SettingsModal from "@/components/SettingsModal";
-import type { LLMConfig } from "@/lib/types";
+import type { LLMConfig, RenderParams } from "@/lib/types";
 
 const DEFAULT_CODE = `// 在这里写你的动画代码，或者让 AI 帮你生成
 // 支持 GSAP 和 Anime.js
@@ -43,7 +43,10 @@ export default function Home() {
   const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [doneJobId, setDoneJobId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"code" | "video">("code");
+  const [tab, setTab] = useState<"code" | "preview" | "video">("code");
+  const [renderParams, setRenderParams] = useState<RenderParams>({
+    fps: 30, duration: 3, width: 1280, height: 720,
+  });
 
   useEffect(() => {
     fetch("/api/config")
@@ -105,11 +108,19 @@ export default function Home() {
             tab={tab}
             onTabChange={setTab}
             doneJobId={doneJobId}
+            renderParams={renderParams}
+            library={library}
           />
         </div>
 
         <div className="w-64 shrink-0">
-          <RenderPanel code={code} library={library} onRenderDone={handleRenderDone} />
+          <RenderPanel
+            code={code}
+            library={library}
+            params={renderParams}
+            onParamsChange={setRenderParams}
+            onRenderDone={handleRenderDone}
+          />
         </div>
       </main>
 

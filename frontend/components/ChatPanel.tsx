@@ -76,7 +76,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
 
       if (ae.type === "toolcall_end") {
         const name = currentToolNameRef.current;
-        const label = name === "write_code" ? "生成代码" : name === "str_replace" ? "修改代码" : name === "read_code" ? "查看代码" : name;
+        const label = name === "write_code" ? "生成代码" : name === "str_replace" ? "修改代码" : name === "read_code" ? "查看代码" : "检查代码";
         setMessages((prev) => [
           ...prev,
           { id: Date.now().toString(), role: "tool", content: label, toolName: name, timestamp: Date.now() },

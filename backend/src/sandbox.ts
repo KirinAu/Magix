@@ -89,13 +89,17 @@ export function buildSandboxHtml(userCode: string, options: SandboxOptions): str
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      width: ${options.width}px;
-      height: ${options.height}px;
+      width: 100vw;
+      height: 100vh;
       overflow: hidden;
       background: #000;
     }
   </style>
   ${TIME_HIJACK_SCRIPT}
+  <script>
+    window.CANVAS_WIDTH = ${options.width};
+    window.CANVAS_HEIGHT = ${options.height};
+  </script>
   ${libScript}
 </head>
 <body>
