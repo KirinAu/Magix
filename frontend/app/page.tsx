@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import ChatPanel from "@/components/ChatPanel";
 import RenderPanel from "@/components/RenderPanel";
@@ -42,19 +42,22 @@ for (let i = 0; i < 40; i++) {
 export default function Home() {
   const [code, setCode] = useState(DEFAULT_CODE);
   const [library, setLibrary] = useState("gsap");
-  const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const saved = localStorage.getItem("llm_config");
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null);
 
-  function handleSaveConfig(config: LLMConfig) {
+  useEffect(() => {
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((data) => { if (data) setLlmConfig(data); })
+      .catch(() => {});
+  }, []);
+
+  async function handleSaveConfig(config: LLMConfig) {
     setLlmConfig(config);
-    localStorage.setItem("llm_config", JSON.stringify(config));
+    await fetch("/api/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    }).catch(() => {});
   }
   const [showSettings, setShowSettings] = useState(false);
 

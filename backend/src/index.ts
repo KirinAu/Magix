@@ -10,13 +10,35 @@ import type { Agent } from "@mariozechner/pi-agent-core";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const OUTPUT_DIR = path.join(process.cwd(), "outputs");
+const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "outputs");
+const OUTPUT_DIR = path.join(DATA_DIR, "outputs");
+const CONFIG_FILE = path.join(DATA_DIR, "llm_config.json");
 
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 app.use("/outputs", express.static(OUTPUT_DIR));
 
 fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+
+// ─── LLM 配置持久化 ───────────────────────────────────────────────────────────
+
+app.get("/api/config", (_req, res) => {
+  try {
+    if (!fs.existsSync(CONFIG_FILE)) { res.json(null); return; }
+    res.json(JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8")));
+  } catch {
+    res.json(null);
+  }
+});
+
+app.put("/api/config", (req, res) => {
+  try {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(req.body), "utf-8");
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ─── Agent 会话管理 ───────────────────────────────────────────────────────────
 // sessionId → Agent 实例（简单内存存储，MVP 够用）

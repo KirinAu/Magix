@@ -11,6 +11,9 @@ services:
       GITEA_URL: ${GITEA_URL:-http://127.0.0.1:3000}
       GITEA_TOKEN: ${GITEA_TOKEN:-}
       GITEA_WEBHOOK_SECRET: ${GITEA_WEBHOOK_SECRET:-}
+      DATA_DIR: /data
+    volumes:
+      - /mnt/HDD/projects/MagicEffect/data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
