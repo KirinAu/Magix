@@ -1,0 +1,60 @@
+services:
+  backend:
+    image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-MagicEffect}/MagicEffect-backend:${BACKEND_IMAGE_TAG:-latest}
+    container_name: MagicEffect-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      APP_PORT: 8080
+      GITEA_URL: ${GITEA_URL:-http://127.0.0.1:3000}
+      GITEA_TOKEN: ${GITEA_TOKEN:-}
+      GITEA_WEBHOOK_SECRET: ${GITEA_WEBHOOK_SECRET:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${BACKEND_HOST_PORT:-13001}:8080"
+    depends_on:
+      redis:
+        condition: service_started
+
+  frontend:
+    image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-MagicEffect}/MagicEffect-frontend:${FRONTEND_IMAGE_TAG:-latest}
+    container_name: MagicEffect-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8080}
+      PORT: 3000
+    ports:
+      - "${FRONTEND_HOST_PORT:-13000}:3000"
+    depends_on:
+      - backend
+
+  worker:
+    image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-MagicEffect}/MagicEffect-backend:${WORKER_IMAGE_TAG:-latest}
+    container_name: MagicEffect-worker
+    restart: unless-stopped
+    command: ["node", "dist/worker/index.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_started
+    profiles:
+      - worker
+
+  redis:
+    image: redis:7-alpine
+    container_name: MagicEffect-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:

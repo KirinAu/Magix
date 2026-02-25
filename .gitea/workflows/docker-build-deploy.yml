@@ -1,0 +1,284 @@
+name: Docker Build And Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docs/**"
+      - ".gitea/workflows/**"
+      - "docker-compose.deploy.yml"
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ${{ vars.REGISTRY }}
+      IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE }}
+      BUILD_ALL: ${{ vars.BUILD_ALL }}
+      RETAIN_IMAGE_COUNT: ${{ vars.RETAIN_IMAGE_COUNT }}
+      REGISTRY_INSECURE: ${{ vars.REGISTRY_INSECURE }}
+    outputs:
+      backend_changed: ${{ steps.changes.outputs.backend_changed }}
+      frontend_changed: ${{ steps.changes.outputs.frontend_changed }}
+      build_tag: ${{ steps.meta.outputs.build_tag }}
+      registry: ${{ steps.cfg.outputs.registry }}
+      namespace: ${{ steps.cfg.outputs.namespace }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve registry config
+        id: cfg
+        run: |
+          echo "registry=${REGISTRY:-localhost:5000}" >> "$GITHUB_OUTPUT"
+          echo "namespace=${IMAGE_NAMESPACE:-MagicEffect}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute tags
+        id: meta
+        run: |
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          BUILD_TS="$(date -u +%Y%m%d%H%M%S)"
+          echo "build_tag=${BUILD_TS}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Detect changed scope
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "$BUILD_ALL" ] || [ "$BUILD_ALL" = "true" ]; then
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          FILES="$(git diff --name-only "$BEFORE" "$AFTER")"
+
+          if echo "$FILES" | grep -Eq '^(backend/|docs/|\.gitea/workflows/|docker-compose\.deploy\.yml)'; then
+            echo "backend_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if echo "$FILES" | grep -Eq '^(frontend/|\.gitea/workflows/|docker-compose\.deploy\.yml)'; then
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute dependency hashes
+        id: deps
+        run: |
+          set -e
+
+          hash_from_dir() {
+            TARGET_DIR="$1"
+            TMP_FILE="$(mktemp)"
+            for CANDIDATE in package.json package-lock.json pnpm-lock.yaml yarn.lock requirements.txt requirements-dev.txt poetry.lock; do
+              if [ -f "$TARGET_DIR/$CANDIDATE" ]; then
+                cat "$TARGET_DIR/$CANDIDATE" >> "$TMP_FILE"
+              fi
+            done
+            if [ ! -s "$TMP_FILE" ]; then
+              echo "none"
+            else
+              sha256sum "$TMP_FILE" | cut -c1-16
+            fi
+            rm -f "$TMP_FILE"
+          }
+
+          echo "backend_deps_hash=$(hash_from_dir backend)" >> "$GITHUB_OUTPUT"
+          echo "frontend_deps_hash=$(hash_from_dir frontend)" >> "$GITHUB_OUTPUT"
+
+      - name: Docker login (optional)
+        if: ${{ secrets.REGISTRY_USER != '' && secrets.REGISTRY_PASSWORD != '' }}
+        run: |
+          echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login "${{ steps.cfg.outputs.registry }}" -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+
+      - name: Check deps Dockerfiles
+        id: deps_dockerfiles
+        run: |
+          [ -f backend/Dockerfile.deps ] && echo "backend_deps_enabled=true" >> "$GITHUB_OUTPUT" || echo "backend_deps_enabled=false" >> "$GITHUB_OUTPUT"
+          [ -f frontend/Dockerfile.deps ] && echo "frontend_deps_enabled=true" >> "$GITHUB_OUTPUT" || echo "frontend_deps_enabled=false" >> "$GITHUB_OUTPUT"
+
+      - name: Check backend deps image
+        id: backend_deps
+        if: ${{ steps.changes.outputs.backend_changed == 'true' && steps.deps_dockerfiles.outputs.backend_deps_enabled == 'true' }}
+        run: |
+          if docker pull "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend-deps:${{ steps.deps.outputs.backend_deps_hash }}"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check frontend deps image
+        id: frontend_deps
+        if: ${{ steps.changes.outputs.frontend_changed == 'true' && steps.deps_dockerfiles.outputs.frontend_deps_enabled == 'true' }}
+        run: |
+          if docker pull "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend-deps:${{ steps.deps.outputs.frontend_deps_hash }}"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push backend deps image
+        if: ${{ steps.changes.outputs.backend_changed == 'true' && steps.deps_dockerfiles.outputs.backend_deps_enabled == 'true' && steps.backend_deps.outputs.exists != 'true' }}
+        run: |
+          docker build -f ./backend/Dockerfile.deps \
+            -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend-deps:${{ steps.deps.outputs.backend_deps_hash }}" \
+            ./backend
+          docker push "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend-deps:${{ steps.deps.outputs.backend_deps_hash }}"
+
+      - name: Build and push frontend deps image
+        if: ${{ steps.changes.outputs.frontend_changed == 'true' && steps.deps_dockerfiles.outputs.frontend_deps_enabled == 'true' && steps.frontend_deps.outputs.exists != 'true' }}
+        run: |
+          docker build -f ./frontend/Dockerfile.deps \
+            -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend-deps:${{ steps.deps.outputs.frontend_deps_hash }}" \
+            ./frontend
+          docker push "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend-deps:${{ steps.deps.outputs.frontend_deps_hash }}"
+
+      - name: Pull backend cache image (optional)
+        if: ${{ steps.changes.outputs.backend_changed == 'true' }}
+        run: docker pull "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend:latest" || true
+
+      - name: Pull frontend cache image (optional)
+        if: ${{ steps.changes.outputs.frontend_changed == 'true' }}
+        run: docker pull "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend:latest" || true
+
+      - name: Build backend image
+        if: ${{ steps.changes.outputs.backend_changed == 'true' }}
+        run: |
+          if [ -d docs ]; then
+            rm -rf backend/docs
+            mkdir -p backend/docs
+            cp -a docs/. backend/docs/
+          fi
+
+          if [ "${{ steps.deps_dockerfiles.outputs.backend_deps_enabled }}" = "true" ]; then
+            docker build \
+              --build-arg BACKEND_DEPS_IMAGE="${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend-deps:${{ steps.deps.outputs.backend_deps_hash }}" \
+              --cache-from "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend:latest" \
+              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend:latest" \
+              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend:${{ steps.meta.outputs.build_tag }}" \
+              ./backend
+          else
+            docker build \
+              --cache-from "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend:latest" \
+              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend:latest" \
+              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend:${{ steps.meta.outputs.build_tag }}" \
+              ./backend
+          fi
+
+      - name: Build frontend image
+        if: ${{ steps.changes.outputs.frontend_changed == 'true' }}
+        run: |
+          if [ "${{ steps.deps_dockerfiles.outputs.frontend_deps_enabled }}" = "true" ]; then
+            docker build \
+              --build-arg FRONTEND_DEPS_IMAGE="${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend-deps:${{ steps.deps.outputs.frontend_deps_hash }}" \
+              --cache-from "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend:latest" \
+              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend:latest" \
+              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend:${{ steps.meta.outputs.build_tag }}" \
+              ./frontend
+          else
+            docker build \
+              --cache-from "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend:latest" \
+              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend:latest" \
+              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend:${{ steps.meta.outputs.build_tag }}" \
+              ./frontend
+          fi
+
+      - name: Push backend image
+        if: ${{ steps.changes.outputs.backend_changed == 'true' }}
+        run: |
+          docker push "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend:latest"
+          docker push "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-backend:${{ steps.meta.outputs.build_tag }}"
+
+      - name: Push frontend image
+        if: ${{ steps.changes.outputs.frontend_changed == 'true' }}
+        run: |
+          docker push "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend:latest"
+          docker push "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/MagicEffect-frontend:${{ steps.meta.outputs.build_tag }}"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: ${{ needs.build-and-push.outputs.backend_changed == 'true' || needs.build-and-push.outputs.frontend_changed == 'true' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure deploy env exists
+        env:
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          set -e
+          if [ -z "$DEPLOY_PATH" ]; then
+            DEPLOY_PATH="/opt/MagicEffect"
+          fi
+          mkdir -p "$DEPLOY_PATH"
+
+          if [ ! -f "$DEPLOY_PATH/.env" ] && [ -f "$DEPLOY_PATH/.env.deploy.example" ]; then
+            cp "$DEPLOY_PATH/.env.deploy.example" "$DEPLOY_PATH/.env"
+          fi
+
+          if [ -f "$DEPLOY_PATH/.env" ]; then
+            cp "$DEPLOY_PATH/.env" "$PWD/.env"
+          elif [ -f "$PWD/.env.deploy.example" ]; then
+            cp "$PWD/.env.deploy.example" "$PWD/.env"
+          fi
+
+      - name: Sync files to deploy path
+        env:
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          set -e
+          if [ -z "$DEPLOY_PATH" ]; then
+            DEPLOY_PATH="/opt/MagicEffect"
+          fi
+          mkdir -p "$DEPLOY_PATH"
+          find "$DEPLOY_PATH" -mindepth 1 -maxdepth 1 ! -name ".env" -exec rm -rf {} +
+          find "$PWD" -mindepth 1 -maxdepth 1 ! -name ".env" -exec cp -a {} "$DEPLOY_PATH/" \;
+
+      - name: Deploy with docker compose
+        env:
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          DEPLOY_COMMAND: ${{ vars.DEPLOY_COMMAND }}
+        run: |
+          set -e
+          if [ -z "$DEPLOY_PATH" ]; then
+            DEPLOY_PATH="/opt/MagicEffect"
+          fi
+          if [ -z "$DEPLOY_COMMAND" ]; then
+            DEPLOY_COMMAND="docker compose --env-file .env -f docker-compose.deploy.yml pull backend frontend && docker compose --env-file .env -f docker-compose.deploy.yml up -d --force-recreate backend frontend"
+          fi
+
+          cd "$DEPLOY_PATH"
+
+          if docker compose version >/dev/null 2>&1; then
+            eval "$DEPLOY_COMMAND"
+          elif docker-compose version >/dev/null 2>&1; then
+            SAFE_CMD=$(printf '%s' "$DEPLOY_COMMAND" | sed 's/docker compose/docker-compose/g')
+            eval "$SAFE_CMD"
+          else
+            echo "Neither docker compose nor docker-compose is available"
+            exit 1
+          fi
+
+      - name: Show running containers
+        run: docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
