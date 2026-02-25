@@ -42,7 +42,20 @@ for (let i = 0; i < 40; i++) {
 export default function Home() {
   const [code, setCode] = useState(DEFAULT_CODE);
   const [library, setLibrary] = useState("gsap");
-  const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null);
+  const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = localStorage.getItem("llm_config");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  function handleSaveConfig(config: LLMConfig) {
+    setLlmConfig(config);
+    localStorage.setItem("llm_config", JSON.stringify(config));
+  }
   const [showSettings, setShowSettings] = useState(false);
 
   function handleCodeUpdate(newCode: string, newLibrary: string) {
@@ -89,7 +102,7 @@ export default function Home() {
       {showSettings && (
         <SettingsModal
           config={llmConfig}
-          onSave={setLlmConfig}
+          onSave={handleSaveConfig}
           onClose={() => setShowSettings(false)}
         />
       )}
