@@ -1,7 +1,7 @@
 services:
   backend:
-    image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-MagicEffect}/MagicEffect-backend:${BACKEND_IMAGE_TAG:-latest}
-    container_name: MagicEffect-backend
+    image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-magiceffect}/magiceffect-backend:${BACKEND_IMAGE_TAG:-latest}
+    container_name: magiceffect-backend
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -20,8 +20,8 @@ services:
         condition: service_started
 
   frontend:
-    image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-MagicEffect}/MagicEffect-frontend:${FRONTEND_IMAGE_TAG:-latest}
-    container_name: MagicEffect-frontend
+    image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-magiceffect}/magiceffect-frontend:${FRONTEND_IMAGE_TAG:-latest}
+    container_name: magiceffect-frontend
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -33,8 +33,8 @@ services:
       - backend
 
   worker:
-    image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-MagicEffect}/MagicEffect-backend:${WORKER_IMAGE_TAG:-latest}
-    container_name: MagicEffect-worker
+    image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-magiceffect}/magiceffect-backend:${WORKER_IMAGE_TAG:-latest}
+    container_name: magiceffect-worker
     restart: unless-stopped
     command: ["node", "dist/worker/index.js"]
     environment:
@@ -51,7 +51,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: MagicEffect-redis
+    container_name: magiceffect-redis
     restart: unless-stopped
     volumes:
       - redis_data:/data
