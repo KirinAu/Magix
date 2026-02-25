@@ -65,7 +65,7 @@ function buildModel(config: LLMConfig): Model<any> {
     input: ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
-    maxTokens: 8192,
+    maxTokens: 64000,
   };
 }
 
