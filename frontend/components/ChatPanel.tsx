@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import type { ChatMessage, LLMConfig } from "@/lib/types";
 import { startSession, sendMessage, abortSession } from "@/lib/api";
 
@@ -20,6 +21,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
   const assistantTextRef = useRef<string>("");
   const currentToolNameRef = useRef<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isComposingRef = useRef(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -169,12 +171,12 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
                 <span className="text-xs text-gray-400">{msg.content}</span>
               </div>
             ) : (
-              <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+              <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
                 msg.role === "user"
-                  ? "bg-gray-900 text-white rounded-br-sm"
-                  : "bg-gray-100 text-gray-800 rounded-bl-sm"
+                  ? "bg-gray-900 text-white rounded-br-sm whitespace-pre-wrap"
+                  : "bg-gray-100 text-gray-800 rounded-bl-sm prose prose-sm max-w-none"
               }`}>
-                {msg.content}
+                {msg.role === "user" ? msg.content : <ReactMarkdown>{msg.content}</ReactMarkdown>}
               </div>
             )}
           </div>
@@ -182,8 +184,8 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
 
         {isStreaming && assistantText && (
           <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm bg-gray-100 text-gray-800 whitespace-pre-wrap">
-              {assistantText}
+            <div className="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm bg-gray-100 text-gray-800 prose prose-sm max-w-none">
+              <ReactMarkdown>{assistantText}</ReactMarkdown>
               <span className="inline-block w-1 h-3.5 bg-gray-400 ml-0.5 animate-pulse align-middle" />
             </div>
           </div>
@@ -218,28 +220,36 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
       </div>
 
       <div className="px-4 py-3 border-t border-gray-100">
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-end">
           <input
             className="flex-1 rounded-xl bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-200"
             placeholder={llmConfig ? "描述动画效果..." : "请先配置 LLM"}
             value={input}
             disabled={isStreaming || !llmConfig}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+            onCompositionStart={() => { isComposingRef.current = true; }}
+            onCompositionEnd={() => { isComposingRef.current = false; }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !isComposingRef.current) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
           />
-          <button
-            onClick={handleSend}
-            disabled={isStreaming || !input.trim() || !llmConfig}
-            className="rounded-xl bg-gray-900 text-white px-4 py-2.5 text-sm font-medium disabled:opacity-40 hover:bg-gray-700 transition-colors"
-          >
-            发送
-          </button>
-          {isStreaming && (
+          {isStreaming ? (
             <button
               onClick={handleAbort}
-              className="rounded-xl bg-red-500 text-white px-4 py-2.5 text-sm font-medium hover:bg-red-600 transition-colors"
+              className="shrink-0 rounded-xl bg-red-500 text-white px-4 py-2.5 text-sm font-medium hover:bg-red-600 transition-colors"
             >
               停止
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || !llmConfig}
+              className="shrink-0 rounded-xl bg-gray-900 text-white px-4 py-2.5 text-sm font-medium disabled:opacity-40 hover:bg-gray-700 transition-colors"
+            >
+              发送
             </button>
           )}
         </div>

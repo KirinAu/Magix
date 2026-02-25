@@ -97,7 +97,7 @@ export default function Home() {
       </header>
 
       <main className="flex-1 flex gap-4 p-4 overflow-hidden">
-        <div className="w-72 shrink-0">
+        <div className="w-96 shrink-0">
           <ChatPanel onCodeUpdate={handleCodeUpdate} llmConfig={llmConfig} />
         </div>
 

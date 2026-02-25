@@ -169,6 +169,9 @@ export function createAnimationAgent(
 
   agent.subscribe((event: AgentEvent) => {
     sendSSE(res, event);
+    if (event.type === "agent_end" && !res.writableEnded) {
+      res.end();
+    }
   });
 
   return { agent, setRes: (r: Response) => { res = r; } };

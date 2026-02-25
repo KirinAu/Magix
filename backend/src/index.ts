@@ -105,13 +105,6 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
   // 把当前 response 绑定到 agent，工具里的 sendSSE 会写到这里
   session.setRes(res);
 
-  session.agent.subscribe((event) => {
-    sendSSE(res, event);
-    if (event.type === "agent_end") {
-      res.end();
-    }
-  });
-
   try {
     await session.agent.prompt(message);
   } catch (err: any) {
