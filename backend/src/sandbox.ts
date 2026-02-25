@@ -1,37 +1,38 @@
 /**
  * 把用户的动画代码包裹成完整 HTML
- * 注入时间劫持脚本，让 GSAP/Anime.js 可以被精确 seek
+ * 注入时间劫持脚本，让 GSAP/Anime.js/PixiJS/Three.js/Canvas 2D 可以被精确 seek
  */
 
 export interface SandboxOptions {
   width: number;
   height: number;
-  library: "gsap" | "anime" | "auto";
+  library: "gsap" | "anime" | "pixi" | "three" | "auto";
 }
 
 const TIME_HIJACK_SCRIPT = `
 <script>
-  // 冻结真实时间，让动画库使用我们控制的虚拟时间
   window.__virtualTime = 0;
 
   // 劫持 Date
-  const _DateNow = Date.now.bind(Date);
   Date.now = () => window.__virtualTime * 1000;
 
   // 劫持 performance.now
-  const _perfNow = performance.now.bind(performance);
   performance.now = () => window.__virtualTime * 1000;
 
-  // 劫持 requestAnimationFrame（防止动画自动播放）
+  // 劫持 RAF：排队而不是立即执行，由 __seekTo 统一 flush
+  let __rafCallbacks = new Map();
+  let __rafId = 0;
   window.requestAnimationFrame = (cb) => {
-    // 不自动执行，由外部 seek 控制
-    return 0;
+    const id = ++__rafId;
+    __rafCallbacks.set(id, cb);
+    return id;
   };
-  window.cancelAnimationFrame = () => {};
+  window.cancelAnimationFrame = (id) => { __rafCallbacks.delete(id); };
 
   // seek 函数：外部调用来跳到指定时间（秒）
   window.__seekTo = function(timeInSeconds) {
     window.__virtualTime = timeInSeconds;
+    const t = timeInSeconds * 1000;
 
     // GSAP seek
     if (window.gsap) {
@@ -41,23 +42,34 @@ const TIME_HIJACK_SCRIPT = `
     // Anime.js seek
     if (window.__animeInstances && window.__animeInstances.length > 0) {
       window.__animeInstances.forEach(anim => {
-        anim.seek(timeInSeconds * 1000);
+        try { anim.seek(t); } catch(e) {}
       });
     }
+
+    // PixiJS ticker seek
+    if (window.__pixiApps && window.__pixiApps.length > 0) {
+      window.__pixiApps.forEach(app => {
+        try { app.ticker.update(t); } catch(e) {}
+      });
+    }
+
+    // Canvas 2D / Three.js / 其他 RAF 循环 — flush 所有排队的回调
+    const cbs = [...__rafCallbacks.values()];
+    __rafCallbacks.clear();
+    cbs.forEach(cb => { try { cb(t); } catch(e) {} });
   };
 
-  // 拦截 anime() 调用，收集所有实例
+  // 收集 anime 实例
   window.__animeInstances = [];
-  document.addEventListener('__animeCreated', (e) => {
-    window.__animeInstances.push(e.detail);
-  });
+  // 收集 PixiJS Application 实例
+  window.__pixiApps = [];
 </script>
 `;
 
 const GSAP_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>`;
+
 const ANIME_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
 <script>
-  // 立即包装 anime，确保用户代码调用时已经是包装版本
   (function() {
     const _anime = window.anime;
     window.anime = function(params) {
@@ -69,16 +81,40 @@ const ANIME_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3
   })();
 </script>`;
 
-function detectLibrary(code: string): "gsap" | "anime" {
-  if (code.includes("gsap") || code.includes("TweenMax") || code.includes("TweenLite")) {
-    return "gsap";
-  }
-  return "anime";
+// PixiJS：加载后拦截 Application 构造函数，自动停止 ticker 并收集实例
+const PIXI_CDN = `${GSAP_CDN}
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
+<script>
+  (function() {
+    const _App = PIXI.Application;
+    function PatchedApp(options) {
+      const app = new _App(options);
+      app.ticker.stop();
+      window.__pixiApps.push(app);
+      return app;
+    }
+    PatchedApp.prototype = _App.prototype;
+    PIXI.Application = PatchedApp;
+  })();
+</script>`;
+
+// Three.js：RAF 劫持已经处理 render loop，直接加载即可
+const THREE_CDN = `${GSAP_CDN}
+<script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js"></script>`;
+
+function detectLibrary(code: string): "gsap" | "anime" | "pixi" | "three" {
+  if (code.includes("THREE") || code.includes("three.js")) return "three";
+  if (code.includes("PIXI") || code.includes("pixi")) return "pixi";
+  if (code.includes("anime(") || code.includes("anime.")) return "anime";
+  return "gsap";
 }
 
 export function buildSandboxHtml(userCode: string, options: SandboxOptions): string {
   const lib = options.library === "auto" ? detectLibrary(userCode) : options.library;
-  const libScript = lib === "gsap" ? GSAP_CDN : ANIME_CDN;
+  const libScript = lib === "anime" ? ANIME_CDN
+    : lib === "pixi" ? PIXI_CDN
+    : lib === "three" ? THREE_CDN
+    : GSAP_CDN;
 
   return `<!DOCTYPE html>
 <html>
