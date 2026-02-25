@@ -14,7 +14,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "${BACKEND_HOST_PORT:-13001}:8080"
+      - "${BACKEND_HOST_PORT:-13003}:8080"
     depends_on:
       redis:
         condition: service_started
@@ -28,7 +28,7 @@ services:
       INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL:-http://backend:8080}
       PORT: 3000
     ports:
-      - "${FRONTEND_HOST_PORT:-13000}:3000"
+      - "${FRONTEND_HOST_PORT:-18083}:3000"
     depends_on:
       - backend
 
