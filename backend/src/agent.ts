@@ -187,6 +187,7 @@ export function createAnimationAgent(
     if (event.type === "agent_end") {
       const lastMsg = event.messages[event.messages.length - 1] as any;
       if (lastMsg?.stopReason === "error") {
+        console.error("[agent_end error] lastMsg:", JSON.stringify(lastMsg, null, 2));
         const errText = lastMsg.content
           ?.filter((c: any) => c.type === "text")
           .map((c: any) => c.text)
