@@ -153,14 +153,6 @@ jobs:
             ./frontend
           docker push "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend-deps:${{ steps.deps.outputs.frontend_deps_hash }}"
 
-      - name: Pull backend cache image (optional)
-        if: ${{ steps.changes.outputs.backend_changed == 'true' }}
-        run: docker pull "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:latest" || true
-
-      - name: Pull frontend cache image (optional)
-        if: ${{ steps.changes.outputs.frontend_changed == 'true' }}
-        run: docker pull "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:latest" || true
-
       - name: Build backend image
         if: ${{ steps.changes.outputs.backend_changed == 'true' }}
         run: |
@@ -170,38 +162,18 @@ jobs:
             cp -a docs/. backend/docs/
           fi
 
-          if [ "${{ steps.deps_dockerfiles.outputs.backend_deps_enabled }}" = "true" ]; then
-            docker build --provenance=false \
-              --build-arg BACKEND_DEPS_IMAGE="${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend-deps:${{ steps.deps.outputs.backend_deps_hash }}" \
-              --cache-from "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:latest" \
-              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:latest" \
-              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:${{ steps.meta.outputs.build_tag }}" \
-              ./backend
-          else
-            docker build --provenance=false \
-              --cache-from "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:latest" \
-              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:latest" \
-              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:${{ steps.meta.outputs.build_tag }}" \
-              ./backend
-          fi
+          docker build --provenance=false \
+            -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:latest" \
+            -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:${{ steps.meta.outputs.build_tag }}" \
+            ./backend
 
       - name: Build frontend image
         if: ${{ steps.changes.outputs.frontend_changed == 'true' }}
         run: |
-          if [ "${{ steps.deps_dockerfiles.outputs.frontend_deps_enabled }}" = "true" ]; then
-            docker build --provenance=false \
-              --build-arg FRONTEND_DEPS_IMAGE="${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend-deps:${{ steps.deps.outputs.frontend_deps_hash }}" \
-              --cache-from "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:latest" \
-              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:latest" \
-              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:${{ steps.meta.outputs.build_tag }}" \
-              ./frontend
-          else
-            docker build --provenance=false \
-              --cache-from "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:latest" \
-              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:latest" \
-              -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:${{ steps.meta.outputs.build_tag }}" \
-              ./frontend
-          fi
+          docker build --provenance=false \
+            -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:latest" \
+            -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:${{ steps.meta.outputs.build_tag }}" \
+            ./frontend
 
       - name: Push backend image
         if: ${{ steps.changes.outputs.backend_changed == 'true' }}
