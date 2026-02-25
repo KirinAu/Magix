@@ -18,6 +18,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
 
   const sessionIdRef = useRef<string | null>(null);
   const assistantTextRef = useRef<string>("");
+  const currentToolNameRef = useRef<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -61,6 +62,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
             .reverse()
             .find((c: any) => c.type === "toolCall");
           if (lastToolCall) {
+            currentToolNameRef.current = lastToolCall.name;
             if (lastToolCall.name === "write_code") {
               setToolStatus("正在生成代码...");
             } else if (lastToolCall.name === "str_replace") {
@@ -71,6 +73,13 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
       }
 
       if (ae.type === "toolcall_end") {
+        const name = currentToolNameRef.current;
+        const label = name === "write_code" ? "生成代码" : name === "str_replace" ? "修改代码" : name;
+        setMessages((prev) => [
+          ...prev,
+          { id: Date.now().toString(), role: "tool", content: label, toolName: name, timestamp: Date.now() },
+        ]);
+        currentToolNameRef.current = "";
         setToolStatus(null);
       }
     }
@@ -136,13 +145,20 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
 
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-              msg.role === "user"
-                ? "bg-gray-900 text-white rounded-br-sm"
-                : "bg-gray-100 text-gray-800 rounded-bl-sm"
-            }`}>
-              {msg.content}
-            </div>
+            {msg.role === "tool" ? (
+              <div className="flex items-center gap-2 rounded-xl px-3 py-1.5 bg-gray-50 border border-gray-100">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                <span className="text-xs text-gray-400">{msg.content}</span>
+              </div>
+            ) : (
+              <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+                msg.role === "user"
+                  ? "bg-gray-900 text-white rounded-br-sm"
+                  : "bg-gray-100 text-gray-800 rounded-bl-sm"
+              }`}>
+                {msg.content}
+              </div>
+            )}
           </div>
         ))}
 

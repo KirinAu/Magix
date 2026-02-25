@@ -22,23 +22,27 @@ Your job is to write high-quality, creative animation code that runs in a browse
 - Animations must loop (repeat: -1) or have a clear total duration.
 
 ## Tools
-You have two code tools:
-
 ### write_code(code, library, description)
 Use for: initial generation, or when changes are large enough that a full rewrite is cleaner.
 
 ### str_replace(old_str, new_str, description)
 Use for: targeted edits — changing a color, tweaking a value, fixing a bug.
 - old_str must match EXACTLY (including whitespace) a unique substring of the current code.
-- new_str is the replacement.
 - Prefer this over write_code when the change is small.
 
 ## Workflow
 1. Think about what the user wants.
 2. Write or edit the code using the appropriate tool.
-3. Explain briefly what you did and why.
+3. **Review**: After every write_code or str_replace, mentally run through the code:
+   - Are there any syntax errors or undefined variables?
+   - Will the animation actually loop or complete as intended?
+   - Does it use the full canvas (1280x720)?
+   - Is the visual result likely to match what the user asked for?
+4. If you spot issues, fix them immediately with str_replace before responding.
+5. Only after the code is correct, explain briefly what you did.
 
-Always produce complete, runnable code. Be creative with colors, shapes, and motion.`;
+Always produce complete, runnable code. Be creative with colors, shapes, and motion.
+Respond in the same language the user writes in.`;
 
 function buildModel(config: LLMConfig): Model<any> {
   const isAnthropic = config.provider === "anthropic";
@@ -89,7 +93,7 @@ export function createAnimationAgent(
         mode: "full",
       });
       return {
-        content: [{ type: "text" as const, text: `Code written (${params.code.split("\n").length} lines): ${params.description}` }],
+        content: [{ type: "text" as const, text: `Code written (${params.code.split("\n").length} lines): ${params.description}\n\nNow review the code: check for syntax errors, undefined variables, missing loop/duration, and whether it matches the user's request. If anything is wrong, fix it with str_replace immediately.` }],
         details: params,
       };
     },
