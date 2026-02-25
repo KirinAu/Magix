@@ -67,6 +67,8 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
               setToolStatus("正在生成代码...");
             } else if (lastToolCall.name === "str_replace") {
               setToolStatus("正在修改代码...");
+            } else if (lastToolCall.name === "read_code") {
+              setToolStatus("正在查看代码...");
             }
           }
         }
@@ -74,7 +76,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
 
       if (ae.type === "toolcall_end") {
         const name = currentToolNameRef.current;
-        const label = name === "write_code" ? "生成代码" : name === "str_replace" ? "修改代码" : name;
+        const label = name === "write_code" ? "生成代码" : name === "str_replace" ? "修改代码" : name === "read_code" ? "查看代码" : name;
         setMessages((prev) => [
           ...prev,
           { id: Date.now().toString(), role: "tool", content: label, toolName: name, timestamp: Date.now() },

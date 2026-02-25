@@ -22,6 +22,9 @@ Your job is to write high-quality, creative animation code that runs in a browse
 - Animations must loop (repeat: -1) or have a clear total duration.
 
 ## Tools
+### read_code()
+Use before str_replace to verify the exact current code content.
+
 ### write_code(code, library, description)
 Use for: initial generation, or when changes are large enough that a full rewrite is cleaner.
 
@@ -70,6 +73,19 @@ export function createAnimationAgent(
 ): Agent {
   // 维护当前代码状态（session 级别）
   let currentCode = "";
+
+  const readCodeTool: AgentTool<any> = {
+    name: "read_code",
+    label: "Read Current Code",
+    description: "Returns the current animation code. Use this before str_replace to verify the exact content.",
+    parameters: Type.Object({}),
+    execute: async () => {
+      return {
+        content: [{ type: "text" as const, text: currentCode ? `Current code:\n\`\`\`js\n${currentCode}\n\`\`\`` : "No code written yet." }],
+        details: { code: currentCode },
+      };
+    },
+  };
 
   const writeCodeTool: AgentTool<any> = {
     name: "write_code",
@@ -143,7 +159,7 @@ export function createAnimationAgent(
     initialState: {
       systemPrompt: SYSTEM_PROMPT,
       model,
-      tools: [writeCodeTool, strReplaceTool],
+      tools: [readCodeTool, writeCodeTool, strReplaceTool],
     },
     getApiKey: () => config.apiKey,
   });
