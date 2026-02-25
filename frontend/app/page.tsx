@@ -1,13 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
+import CodePreviewPanel from "@/components/CodePreviewPanel";
 import ChatPanel from "@/components/ChatPanel";
 import RenderPanel from "@/components/RenderPanel";
 import SettingsModal from "@/components/SettingsModal";
 import type { LLMConfig } from "@/lib/types";
-
-const CodeEditor = dynamic(() => import("@/components/CodeEditor"), { ssr: false });
 
 const DEFAULT_CODE = `// 在这里写你的动画代码，或者让 AI 帮你生成
 // 支持 GSAP 和 Anime.js
@@ -43,6 +41,9 @@ export default function Home() {
   const [code, setCode] = useState(DEFAULT_CODE);
   const [library, setLibrary] = useState("gsap");
   const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [doneJobId, setDoneJobId] = useState<string | null>(null);
+  const [tab, setTab] = useState<"code" | "video">("code");
 
   useEffect(() => {
     fetch("/api/config")
@@ -59,11 +60,15 @@ export default function Home() {
       body: JSON.stringify(config),
     }).catch(() => {});
   }
-  const [showSettings, setShowSettings] = useState(false);
 
   function handleCodeUpdate(newCode: string, newLibrary: string) {
     setCode(newCode);
     setLibrary(newLibrary);
+  }
+
+  function handleRenderDone(jobId: string) {
+    setDoneJobId(jobId);
+    setTab("video");
   }
 
   return (
@@ -94,11 +99,17 @@ export default function Home() {
         </div>
 
         <div className="flex-1 min-w-0">
-          <CodeEditor value={code} onChange={setCode} />
+          <CodePreviewPanel
+            value={code}
+            onChange={setCode}
+            tab={tab}
+            onTabChange={setTab}
+            doneJobId={doneJobId}
+          />
         </div>
 
         <div className="w-64 shrink-0">
-          <RenderPanel code={code} library={library} />
+          <RenderPanel code={code} library={library} onRenderDone={handleRenderDone} />
         </div>
       </main>
 

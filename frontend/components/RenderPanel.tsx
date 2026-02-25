@@ -7,6 +7,7 @@ import { submitRender, watchRenderJob, getDownloadUrl } from "@/lib/api";
 interface RenderPanelProps {
   code: string;
   library: string;
+  onRenderDone?: (jobId: string) => void;
 }
 
 const PRESETS = [
@@ -16,7 +17,7 @@ const PRESETS = [
   { label: "Square 1:1", width: 1080, height: 1080, fps: 30 },
 ];
 
-export default function RenderPanel({ code, library }: RenderPanelProps) {
+export default function RenderPanel({ code, library, onRenderDone }: RenderPanelProps) {
   const [params, setParams] = useState<RenderParams>({
     fps: 30,
     duration: 3,
@@ -38,6 +39,7 @@ export default function RenderPanel({ code, library }: RenderPanelProps) {
 
       watchRenderJob(jobId, (update) => {
         setJob({ jobId, ...update });
+        if (update.status === "done") onRenderDone?.(jobId);
       });
     } catch (err: any) {
       setJob({ jobId: "", status: "error", progress: 0, total: 0, error: err.message });
