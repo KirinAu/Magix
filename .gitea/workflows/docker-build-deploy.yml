@@ -140,7 +140,7 @@ jobs:
       - name: Build and push backend deps image
         if: ${{ steps.changes.outputs.backend_changed == 'true' && steps.deps_dockerfiles.outputs.backend_deps_enabled == 'true' && steps.backend_deps.outputs.exists != 'true' }}
         run: |
-          docker build --provenance=false -f ./backend/Dockerfile.deps \
+          docker build --provenance=false --no-cache -f ./backend/Dockerfile.deps \
             -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend-deps:${{ steps.deps.outputs.backend_deps_hash }}" \
             ./backend
           docker push "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend-deps:${{ steps.deps.outputs.backend_deps_hash }}"
@@ -148,7 +148,7 @@ jobs:
       - name: Build and push frontend deps image
         if: ${{ steps.changes.outputs.frontend_changed == 'true' && steps.deps_dockerfiles.outputs.frontend_deps_enabled == 'true' && steps.frontend_deps.outputs.exists != 'true' }}
         run: |
-          docker build --provenance=false -f ./frontend/Dockerfile.deps \
+          docker build --provenance=false --no-cache -f ./frontend/Dockerfile.deps \
             -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend-deps:${{ steps.deps.outputs.frontend_deps_hash }}" \
             ./frontend
           docker push "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend-deps:${{ steps.deps.outputs.frontend_deps_hash }}"
@@ -162,7 +162,7 @@ jobs:
             cp -a docs/. backend/docs/
           fi
 
-          docker build --provenance=false \
+          docker build --provenance=false --no-cache \
             -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:latest" \
             -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-backend:${{ steps.meta.outputs.build_tag }}" \
             ./backend
@@ -170,7 +170,7 @@ jobs:
       - name: Build frontend image
         if: ${{ steps.changes.outputs.frontend_changed == 'true' }}
         run: |
-          docker build --provenance=false \
+          docker build --provenance=false --no-cache \
             -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:latest" \
             -t "${{ steps.cfg.outputs.registry }}/${{ steps.cfg.outputs.namespace }}/magiceffect-frontend:${{ steps.meta.outputs.build_tag }}" \
             ./frontend
