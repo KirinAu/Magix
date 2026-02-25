@@ -71,10 +71,11 @@ function buildModel(config: LLMConfig): Model<any> {
 
 export function createAnimationAgent(
   config: LLMConfig,
-  res: Response
-): Agent {
+  initialRes: Response
+): { agent: Agent; setRes: (r: Response) => void } {
   // 维护当前代码状态（session 级别）
   let currentCode = "";
+  let res = initialRes;
 
   const readCodeTool: AgentTool<any> = {
     name: "read_code",
@@ -170,7 +171,7 @@ export function createAnimationAgent(
     sendSSE(res, event);
   });
 
-  return agent;
+  return { agent, setRes: (r: Response) => { res = r; } };
 }
 
 export function sendSSE(res: Response, data: unknown): void {

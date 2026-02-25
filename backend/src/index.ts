@@ -8,6 +8,11 @@ import { renderFrames } from "./renderer";
 import { encodeToMp4, cleanupFrames } from "./encoder";
 import type { Agent } from "@mariozechner/pi-agent-core";
 
+interface Session {
+  agent: Agent;
+  setRes: (r: import("express").Response) => void;
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "outputs");
@@ -42,7 +47,7 @@ app.put("/api/config", (req, res) => {
 
 // ─── Agent 会话管理 ───────────────────────────────────────────────────────────
 // sessionId → Agent 实例（简单内存存储，MVP 够用）
-const sessions = new Map<string, Agent>();
+const sessions = new Map<string, Session>();
 
 /**
  * POST /api/chat/start
@@ -64,8 +69,8 @@ app.post("/api/chat/start", (req, res) => {
   res.setHeader("X-Session-Id", sessionId);
   res.flushHeaders();
 
-  const agent = createAnimationAgent(config, res);
-  sessions.set(sessionId, agent);
+  const { agent, setRes } = createAnimationAgent(config, res);
+  sessions.set(sessionId, { agent, setRes });
 
   // 发送 session_ready 事件后关闭连接（sessionId 已通过事件传递）
   sendSSE(res, { type: "session_ready", sessionId });
@@ -85,8 +90,8 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
     return;
   }
 
-  const agent = sessions.get(sessionId);
-  if (!agent) {
+  const session = sessions.get(sessionId);
+  if (!session) {
     res.status(404).json({ error: "Session not found" });
     return;
   }
@@ -97,8 +102,10 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
-  // 重新绑定 SSE 到新的 response
-  agent.subscribe((event) => {
+  // 把当前 response 绑定到 agent，工具里的 sendSSE 会写到这里
+  session.setRes(res);
+
+  session.agent.subscribe((event) => {
     sendSSE(res, event);
     if (event.type === "agent_end") {
       res.end();
@@ -106,7 +113,7 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
   });
 
   try {
-    await agent.prompt(message);
+    await session.agent.prompt(message);
   } catch (err: any) {
     sendSSE(res, { type: "error", message: err.message });
     res.end();
@@ -127,9 +134,9 @@ app.delete("/api/chat/:sessionId", (req, res) => {
  * 中止当前正在运行的 agent
  */
 app.post("/api/chat/:sessionId/abort", (req, res) => {
-  const agent = sessions.get(req.params.sessionId);
-  if (!agent) { res.status(404).json({ error: "Session not found" }); return; }
-  agent.abort();
+  const session = sessions.get(req.params.sessionId);
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+  session.agent.abort();
   res.json({ ok: true });
 });
 
