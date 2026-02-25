@@ -30,8 +30,8 @@ jobs:
     steps:
       - name: Checkout repository
         run: |
-          git clone --depth=1 --branch "$GITHUB_REF_NAME" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" .
-          git fetch --depth=2
+          REPO_URL=$(echo "$GITHUB_SERVER_URL" | sed 's|://|://oauth2:${{ github.token }}@|')
+          git clone --depth=2 --branch "$GITHUB_REF_NAME" "${REPO_URL}/${GITHUB_REPOSITORY}.git" .
 
       - name: Resolve registry config
         id: cfg
@@ -205,7 +205,8 @@ jobs:
     steps:
       - name: Checkout repository
         run: |
-          git clone --depth=1 --branch "$GITHUB_REF_NAME" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" .
+          REPO_URL=$(echo "$GITHUB_SERVER_URL" | sed 's|://|://oauth2:${{ github.token }}@|')
+          git clone --depth=1 --branch "$GITHUB_REF_NAME" "${REPO_URL}/${GITHUB_REPOSITORY}.git" .
 
       - name: Ensure deploy env exists
         env:
