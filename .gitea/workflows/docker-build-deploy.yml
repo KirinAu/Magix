@@ -248,6 +248,11 @@ jobs:
             echo "Created .env from .env.deploy.example — please update secrets before next deploy"
           fi
 
+          # 修正 IMAGE_NAMESPACE 大写问题
+          if [ -f ".env" ]; then
+            sed -i 's/IMAGE_NAMESPACE=MagicEffect/IMAGE_NAMESPACE=magiceffect/g' ".env"
+          fi
+
           if docker compose version >/dev/null 2>&1; then
             eval "$DEPLOY_COMMAND"
           elif docker-compose version >/dev/null 2>&1; then
