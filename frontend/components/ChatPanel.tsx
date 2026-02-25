@@ -35,6 +35,19 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
       return;
     }
 
+    if (type === "error") {
+      setIsStreaming(false);
+      setToolStatus(null);
+      const errMsg = event.message || "未知错误";
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now().toString(), role: "assistant", content: `**错误：** ${errMsg}`, timestamp: Date.now() },
+      ]);
+      assistantTextRef.current = "";
+      setAssistantText("");
+      return;
+    }
+
     if (type === "agent_start") {
       setIsStreaming(true);
       setAssistantText("");
