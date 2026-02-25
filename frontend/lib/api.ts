@@ -1,4 +1,4 @@
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+const BACKEND = "";
 
 export async function startSession(
   config: { provider: string; modelId: string; apiKey: string; baseUrl?: string },
