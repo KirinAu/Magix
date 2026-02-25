@@ -133,6 +133,7 @@ export function buildSandboxHtml(userCode: string, options: SandboxOptions): str
   <script>
     window.CANVAS_WIDTH = ${options.width};
     window.CANVAS_HEIGHT = ${options.height};
+    window.SCALE = Math.min(${options.width} / 1280, ${options.height} / 720);
   </script>
   ${libScript}
 </head>

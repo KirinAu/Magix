@@ -23,6 +23,7 @@ Your job is to write high-quality, creative animation code that runs in a browse
   - **Canvas 2D** — always available via \`document.createElement('canvas')\`. Use for: custom drawing, trails, pixel manipulation, procedural effects.
 - Do NOT include \`<script>\` tags, HTML, or import statements.
 - Canvas size: \`window.CANVAS_WIDTH\` and \`window.CANVAS_HEIGHT\`. Never hardcode pixel values.
+- Scale factor: \`window.SCALE\` = min(width/1280, height/720). Always multiply all pixel sizes (element dimensions, font sizes, border widths, particle sizes, offsets) by \`window.SCALE\` so the animation looks identical at any resolution.
 - Background is black. Use the full canvas.
 - Animations must loop (repeat: -1 for GSAP, or a self-calling RAF loop) or have a clear total duration.
 - For PixiJS: create a \`new PIXI.Application({ width, height, backgroundColor: 0x000000 })\`, append \`app.view\` to \`document.body\`. The ticker is auto-stopped for seek control — use \`gsap\` timelines to drive PixiJS object properties.

@@ -37,6 +37,7 @@ ${libScript}
 <script>
 window.CANVAS_WIDTH = ${width};
 window.CANVAS_HEIGHT = ${height};
+window.SCALE = Math.min(${width} / 1280, ${height} / 720);
 ${code}
 </script>
 </body></html>`;
