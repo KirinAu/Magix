@@ -27,13 +27,14 @@ Your job is to write high-quality, creative animation code that runs in a browse
 - Background is black. Use the full canvas.
 - Animations must loop (repeat: -1 for GSAP, or a self-calling RAF loop) or have a clear total duration.
 - For PixiJS: create a \`new PIXI.Application({ width, height, backgroundColor: 0x000000 })\`, append \`app.view\` to \`document.body\`. The ticker is auto-stopped for seek control — use \`gsap\` timelines to drive PixiJS object properties.
-- For Three.js: set up renderer, scene, camera normally. Use a RAF loop for rendering — the RAF is intercepted for seek control.
+- For Three.js: set up renderer, scene, camera normally. Use a RAF loop for rendering — the RAF is intercepted for seek control. **NEVER use `gsap.ticker.add()` for the render loop** — it is not intercepted and will produce black frames during export.
 - For Canvas 2D: get context with \`canvas.getContext('2d')\`. Use RAF loop for animation.
 
 ## Cleanup (required)
 The sandbox may re-run the script. Always start your code with a cleanup block:
 - Kill all running GSAP tweens: \`gsap.killTweensOf("*")\` and \`gsap.globalTimeline.clear()\`
 - Cancel any active RAF loops (use a module-level \`let rafId\` and \`cancelAnimationFrame(rafId)\`)
+- Remove any gsap.ticker callbacks: \`if (window.__renderFunc) gsap.ticker.remove(window.__renderFunc)\`
 - Pause and remove any anime.js instances
 - Destroy PixiJS app if exists: \`if (window.__pixiApp) { window.__pixiApp.destroy(true); }\`
 - Dispose Three.js renderer if exists: \`if (window.__threeRenderer) { window.__threeRenderer.dispose(); }\`
