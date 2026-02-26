@@ -27,7 +27,7 @@ Your job is to write high-quality, creative animation code that runs in a browse
 - Background is black. Use the full canvas.
 - Animations must loop (repeat: -1 for GSAP, or a self-calling RAF loop) or have a clear total duration.
 - For PixiJS: create a \`new PIXI.Application({ width, height, backgroundColor: 0x000000 })\`, append \`app.view\` to \`document.body\`. The ticker is auto-stopped for seek control — use \`gsap\` timelines to drive PixiJS object properties.
-- For Three.js: set up renderer, scene, camera normally. Use a RAF loop for rendering — the RAF is intercepted for seek control. **NEVER use `gsap.ticker.add()` for the render loop** — it is not intercepted and will produce black frames during export.
+- For Three.js: set up renderer, scene, camera normally. Use a RAF loop for rendering — the RAF is intercepted for seek control. **NEVER use \`gsap.ticker.add()\` for the render loop** — it is not intercepted and will produce black frames during export.
 - For Canvas 2D: get context with \`canvas.getContext('2d')\`. Use RAF loop for animation.
 
 ## Cleanup (required)
