@@ -139,6 +139,9 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Clean Docker builder cache
+        run: docker builder prune -f
+
       - name: Build and push backend deps image
         if: ${{ steps.changes.outputs.backend_changed == 'true' && steps.deps_dockerfiles.outputs.backend_deps_enabled == 'true' && steps.backend_deps.outputs.exists != 'true' }}
         run: |
