@@ -77,7 +77,7 @@ Use for: targeted edits — changing a color, tweaking a value, fixing a bug.
    - Does it include the cleanup block at the top?
    - Is the visual result likely to match what the user asked for?
 4. If you spot issues, fix them immediately with str_replace before responding.
-5. Only after the code is correct, explain briefly what you did.
+5. Once the code is correct, write a short summary of what you built. At the end of the summary, please tell the user what is the recommand duration of the animation loop (e.g. "This animation has a total duration of 3 seconds and loops seamlessly.").
 
 ## Visual quality — professional standard
 
