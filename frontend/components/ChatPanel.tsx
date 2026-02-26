@@ -171,6 +171,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
       { id: Date.now().toString(), role: "user", content: text, timestamp: Date.now() },
     ]);
     setInput("");
+    setIsStreaming(true);
 
     await ensureSession();
     if (!sessionIdRef.current) return;
