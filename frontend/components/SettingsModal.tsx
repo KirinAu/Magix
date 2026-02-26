@@ -11,6 +11,7 @@ interface SettingsModalProps {
 
 const PROVIDER_PRESETS: Record<string, { baseUrl: string; placeholder: string }> = {
   anthropic: { baseUrl: "https://api.anthropic.com", placeholder: "claude-sonnet-4-20250514" },
+  google: { baseUrl: "https://generativelanguage.googleapis.com/v1beta", placeholder: "gemini-2.5-pro" },
   openai: { baseUrl: "https://api.openai.com", placeholder: "gpt-4o" },
   custom: { baseUrl: "", placeholder: "model-name" },
 };
@@ -143,7 +144,7 @@ export default function SettingsModal({ config, onSave, onClose }: SettingsModal
           <div>
             <label className="text-xs font-medium text-gray-500 block mb-2">Provider</label>
             <div className="flex gap-2">
-              {["anthropic", "openai", "custom"].map((p) => (
+              {["anthropic", "google", "openai", "custom"].map((p) => (
                 <button
                   key={p}
                   onClick={() => handleProviderChange(p)}
@@ -153,7 +154,7 @@ export default function SettingsModal({ config, onSave, onClose }: SettingsModal
                       : "bg-gray-50 text-gray-600 hover:bg-gray-100"
                   }`}
                 >
-                  {p === "anthropic" ? "Anthropic" : p === "openai" ? "OpenAI" : "Custom"}
+                  {p === "anthropic" ? "Anthropic" : p === "google" ? "Google" : p === "openai" ? "OpenAI" : "Custom"}
                 </button>
               ))}
             </div>
@@ -186,7 +187,7 @@ export default function SettingsModal({ config, onSave, onClose }: SettingsModal
           {/* Base URL */}
           <div>
             <label className="text-xs font-medium text-gray-500 block mb-1.5">
-              Base URL <span className="text-gray-300">(可选，OpenAI 兼容)</span>
+              Base URL <span className="text-gray-300">(可选，覆盖默认网关)</span>
             </label>
             <input
               type="text"

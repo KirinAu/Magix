@@ -86,7 +86,12 @@ Respond in the same language the user writes in.`;
 
 function buildModel(config: LLMConfig): Model<any> {
   const isAnthropic = config.provider === "anthropic";
-  const api = isAnthropic ? "anthropic-messages" : "openai-completions";
+  const isGoogle = config.provider === "google";
+  const api = isAnthropic
+    ? "anthropic-messages"
+    : isGoogle
+      ? "google-generative-ai"
+      : "openai-completions";
 
   return {
     id: config.modelId,
@@ -95,7 +100,9 @@ function buildModel(config: LLMConfig): Model<any> {
     provider: config.provider,
     baseUrl: config.baseUrl ?? (isAnthropic
       ? "https://api.anthropic.com"
-      : "https://api.openai.com"),
+      : isGoogle
+        ? "https://generativelanguage.googleapis.com/v1beta"
+        : "https://api.openai.com"),
     reasoning: false,
     input: ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
