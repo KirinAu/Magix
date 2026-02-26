@@ -32,6 +32,23 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
 
   function mkId() { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 
+  function detectLibraryFromCode(code: string): string {
+    if (code.includes("THREE")) return "three";
+    if (code.includes("PIXI")) return "pixi";
+    if (code.includes("anime(") || code.includes("anime.")) return "anime";
+    return "gsap";
+  }
+
+  function extractLatestJsCodeBlock(text: string): string | null {
+    const re = /```(?:javascript|js)?\n([\s\S]*?)```/gi;
+    let match: RegExpExecArray | null = null;
+    let last: string | null = null;
+    while ((match = re.exec(text)) !== null) {
+      last = match[1];
+    }
+    return last ? last.trim() : null;
+  }
+
   useEffect(() => {
     // 切换会话时重置状态
     setMessages(initialMessages ?? []);
@@ -131,34 +148,13 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
       if (ae.type === "text_delta") {
         assistantTextRef.current += ae.delta;
         setAssistantText(assistantTextRef.current);
-      }
-
-      if (ae.type === "toolcall_delta") {
-        if (currentToolNameRef.current === "write_code") {
-          // 从 partial arguments 里提取正在流式构建的 code 字段
-          const toolCall = ae.partial?.content
-            ?.slice()
-            .reverse()
-            .find((c: any) => c.type === "toolCall" && c.name === "write_code");
-          if (toolCall?.arguments) {
-            const match = toolCall.arguments.match(/"code"\s*:\s*"((?:[^"\\]|\\.)*)/);
-            const libMatch = toolCall.arguments.match(/"library"\s*:\s*"(\w+)"/);
-            if (match) {
-              const partialCode = match[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-              // library 字段在 JSON 里排在 code 后面，流式时可能还没到，从代码内容推断
-              let partialLib = libMatch ? libMatch[1] : "gsap";
-              if (!libMatch) {
-                if (partialCode.includes("THREE")) partialLib = "three";
-                else if (partialCode.includes("PIXI")) partialLib = "pixi";
-                else if (partialCode.includes("anime(") || partialCode.includes("anime.")) partialLib = "anime";
-              }
-              onCodeUpdate(partialCode, partialLib);
-            }
-          }
+        const partialCode = extractLatestJsCodeBlock(assistantTextRef.current);
+        if (partialCode) {
+          onCodeUpdate(partialCode, detectLibraryFromCode(partialCode));
         }
       }
 
-      
+      if (ae.type === "toolcall_delta") {
         const partial = ae.partial;
         if (partial?.content) {
           const lastToolCall = [...partial.content]
@@ -166,19 +162,22 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
             .find((c: any) => c.type === "toolCall");
           if (lastToolCall) {
             currentToolNameRef.current = lastToolCall.name;
-            if (lastToolCall.name === "write_code") {
-              setToolStatus("正在生成代码...");
+            if (lastToolCall.name === "commit_code") {
+              setToolStatus("正在提交代码...");
             } else if (lastToolCall.name === "str_replace") {
               setToolStatus("正在修改代码...");
             } else if (lastToolCall.name === "read_code") {
               setToolStatus("正在查看代码...");
+            } else if (lastToolCall.name === "validate_code") {
+              setToolStatus("正在检查代码...");
             }
           }
         }
+      }
 
       if (ae.type === "toolcall_end") {
         const name = currentToolNameRef.current;
-        const label = name === "write_code" ? "生成代码" : name === "str_replace" ? "修改代码" : name === "read_code" ? "查看代码" : "检查代码";
+        const label = name === "commit_code" ? "提交代码" : name === "str_replace" ? "修改代码" : name === "read_code" ? "查看代码" : "检查代码";
         setMessages((prev) => [
           ...prev,
           { id: Date.now().toString(), role: "tool", content: label, toolName: name, timestamp: Date.now() },

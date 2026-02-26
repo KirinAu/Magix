@@ -16,7 +16,7 @@ export interface RenderOptions extends SandboxOptions {
 
 let browserInstance: Browser | null = null;
 
-async function getBrowser(): Promise<Browser> {
+export async function getBrowser(): Promise<Browser> {
   if (!browserInstance || !browserInstance.connected) {
     browserInstance = await puppeteer.launch({
       executablePath: CHROME_PATH,
