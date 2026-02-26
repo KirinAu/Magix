@@ -54,9 +54,14 @@ const THREE_CDN = (origin: string) => `${GSAP_CDN}${scriptWithProbe(`${origin}/l
 
 function buildPreviewHtml(code: string, library: string, width: number, height: number): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const libScript = library === "anime" ? ANIME_CDN
-    : library === "pixi" ? PIXI_CDN
-    : library === "three" ? THREE_CDN(origin)
+  const inferredLibrary = code.includes("THREE") ? "three"
+    : code.includes("PIXI") ? "pixi"
+    : (code.includes("anime(") || code.includes("anime.")) ? "anime"
+    : library;
+
+  const libScript = inferredLibrary === "anime" ? ANIME_CDN
+    : inferredLibrary === "pixi" ? PIXI_CDN
+    : inferredLibrary === "three" ? THREE_CDN(origin)
     : GSAP_CDN;
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -69,13 +74,13 @@ window.CANVAS_WIDTH = ${width};
 window.CANVAS_HEIGHT = ${height};
 window.SCALE = Math.min(${width} / 1280, ${height} / 720);
 window.__previewEmit("preview_boot", {
-  library: ${JSON.stringify(library)},
+  library: ${JSON.stringify(inferredLibrary)},
   width: ${width},
   height: ${height},
   origin: ${JSON.stringify(origin)}
 });
 ${code}
-if (${JSON.stringify(library)} === "three") {
+if (${JSON.stringify(inferredLibrary)} === "three") {
   setTimeout(function() {
     if (!window.THREE) {
       window.__previewEmit("three_missing", { message: "THREE is still undefined after script load." });
