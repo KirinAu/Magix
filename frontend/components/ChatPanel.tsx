@@ -2,15 +2,17 @@
 
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import type { ChatMessage, LLMConfig } from "@/lib/types";
+import type { ChatMessage, LLMConfig, LogEntry } from "@/lib/types";
 import { startSession, sendMessage, abortSession } from "@/lib/api";
 
 interface ChatPanelProps {
   onCodeUpdate: (code: string, library: string) => void;
   llmConfig: LLMConfig | null;
+  onLog: (entry: LogEntry) => void;
+  onLogAppend: (id: string, delta: string) => void;
 }
 
-export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
+export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -22,6 +24,9 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
   const currentToolNameRef = useRef<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
+  const thinkingLogIdRef = useRef<string | null>(null);
+
+  function mkId() { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -39,6 +44,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
       setIsStreaming(false);
       setToolStatus(null);
       const errMsg = event.message || "未知错误";
+      onLog({ id: mkId(), kind: "error", label: errMsg, timestamp: Date.now() });
       setMessages((prev) => [
         ...prev,
         { id: Date.now().toString(), role: "assistant", content: `**错误：** ${errMsg}`, timestamp: Date.now() },
@@ -53,6 +59,23 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
       setAssistantText("");
       setToolStatus(null);
       assistantTextRef.current = "";
+      thinkingLogIdRef.current = null;
+      onLog({ id: mkId(), kind: "info", label: "agent_start", timestamp: Date.now() });
+      return;
+    }
+
+    if (type === "turn_start") {
+      onLog({ id: mkId(), kind: "info", label: "turn_start", timestamp: Date.now() });
+      return;
+    }
+
+    if (type === "tool_execution_start") {
+      onLog({ id: mkId(), kind: "tool", label: `tool_start: ${event.toolName}`, detail: JSON.stringify(event.args, null, 2), timestamp: Date.now() });
+      return;
+    }
+
+    if (type === "tool_execution_end") {
+      onLog({ id: mkId(), kind: "tool", label: `tool_end: ${event.toolName}${event.isError ? " [ERROR]" : ""}`, timestamp: Date.now() });
       return;
     }
 
@@ -64,6 +87,22 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
     if (type === "message_update") {
       const ae = event.assistantMessageEvent;
       if (!ae) return;
+
+      if (ae.type === "thinking_start") {
+        const id = mkId();
+        thinkingLogIdRef.current = id;
+        onLog({ id, kind: "thinking", label: "", timestamp: Date.now() });
+      }
+
+      if (ae.type === "thinking_delta") {
+        if (thinkingLogIdRef.current) {
+          onLogAppend(thinkingLogIdRef.current, ae.delta);
+        }
+      }
+
+      if (ae.type === "thinking_end") {
+        thinkingLogIdRef.current = null;
+      }
 
       if (ae.type === "text_delta") {
         assistantTextRef.current += ae.delta;
@@ -136,6 +175,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
       setIsStreaming(false);
       setAssistantText("");
       assistantTextRef.current = "";
+      onLog({ id: mkId(), kind: "info", label: "agent_end", timestamp: Date.now() });
       return;
     }
   }
@@ -172,6 +212,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
     ]);
     setInput("");
     setIsStreaming(true);
+    onLog({ id: mkId(), kind: "request", label: `sendMessage: "${text}"`, detail: JSON.stringify(llmConfig, null, 2), timestamp: Date.now() });
 
     await ensureSession();
     if (!sessionIdRef.current) return;

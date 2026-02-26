@@ -40,6 +40,16 @@ export interface LLMConfig {
   baseUrl?: string;
 }
 
+export type LogEntryKind = "info" | "thinking" | "tool" | "error" | "request";
+
+export interface LogEntry {
+  id: string;
+  kind: LogEntryKind;
+  label: string;
+  detail?: string;
+  timestamp: number;
+}
+
 export interface RenderJob {
   jobId: string;
   status: "pending" | "rendering" | "encoding" | "done" | "error";

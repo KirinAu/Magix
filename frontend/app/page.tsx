@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import CodePreviewPanel from "@/components/CodePreviewPanel";
 import ChatPanel from "@/components/ChatPanel";
 import RenderPanel from "@/components/RenderPanel";
 import SettingsModal from "@/components/SettingsModal";
-import type { LLMConfig, RenderParams } from "@/lib/types";
+import DebugPanel from "@/components/DebugPanel";
+import type { LLMConfig, RenderParams, LogEntry } from "@/lib/types";
 
 const DEFAULT_CODE = `// 在这里写你的动画代码，或者让 AI 帮你生成
 // 支持 GSAP 和 Anime.js
@@ -47,6 +48,17 @@ export default function Home() {
   const [renderParams, setRenderParams] = useState<RenderParams>({
     fps: 30, duration: 3, width: 1280, height: 720,
   });
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+
+  const handleLog = useCallback((entry: LogEntry) => {
+    setLogs((prev) => [...prev, entry]);
+  }, []);
+
+  const handleLogAppend = useCallback((id: string, delta: string) => {
+    setLogs((prev) => prev.map((e) =>
+      e.id === id ? { ...e, label: e.label + delta } : e
+    ));
+  }, []);
 
   useEffect(() => {
     fetch("/api/config")
@@ -98,7 +110,7 @@ export default function Home() {
 
       <main className="flex-1 flex gap-4 p-4 overflow-hidden">
         <div className="w-96 shrink-0">
-          <ChatPanel onCodeUpdate={handleCodeUpdate} llmConfig={llmConfig} />
+          <ChatPanel onCodeUpdate={handleCodeUpdate} llmConfig={llmConfig} onLog={handleLog} onLogAppend={handleLogAppend} />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -123,6 +135,8 @@ export default function Home() {
           />
         </div>
       </main>
+
+      <DebugPanel logs={logs} onClear={() => setLogs([])} />
 
       {showSettings && (
         <SettingsModal
