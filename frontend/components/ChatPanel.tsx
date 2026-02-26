@@ -121,7 +121,13 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend 
             const libMatch = toolCall.arguments.match(/"library"\s*:\s*"(\w+)"/);
             if (match) {
               const partialCode = match[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-              const partialLib = libMatch ? libMatch[1] : "gsap";
+              // library 字段在 JSON 里排在 code 后面，流式时可能还没到，从代码内容推断
+              let partialLib = libMatch ? libMatch[1] : "gsap";
+              if (!libMatch) {
+                if (partialCode.includes("THREE")) partialLib = "three";
+                else if (partialCode.includes("PIXI")) partialLib = "pixi";
+                else if (partialCode.includes("anime(") || partialCode.includes("anime.")) partialLib = "anime";
+              }
               onCodeUpdate(partialCode, partialLib);
             }
           }
