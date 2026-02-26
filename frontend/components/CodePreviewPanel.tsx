@@ -22,7 +22,7 @@ interface CodePreviewPanelProps {
 const GSAP_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>`;
 const ANIME_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>`;
 const PIXI_CDN = `${GSAP_CDN}<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>`;
-const THREE_CDN = (origin: string) => `${GSAP_CDN}<script src="${origin}/libs/three.min.js"></script>`;
+const THREE_CDN = (origin: string) => `${GSAP_CDN}<script src="${origin}/libs/three.min.js"></script><script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>`;
 
 function buildPreviewHtml(code: string, library: string, width: number, height: number): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
