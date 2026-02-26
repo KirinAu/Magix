@@ -117,11 +117,12 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend 
             .reverse()
             .find((c: any) => c.type === "toolCall" && c.name === "write_code");
           if (toolCall?.arguments) {
-            const match = toolCall.arguments.match(/"code"\s*:\s*"((?:[^"\\]|\\.)*)/)
+            const match = toolCall.arguments.match(/"code"\s*:\s*"((?:[^"\\]|\\.)*)/);
+            const libMatch = toolCall.arguments.match(/"library"\s*:\s*"(\w+)"/);
             if (match) {
-              // 反转 JSON 转义
               const partialCode = match[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
-              onCodeUpdate(partialCode, "gsap");
+              const partialLib = libMatch ? libMatch[1] : "gsap";
+              onCodeUpdate(partialCode, partialLib);
             }
           }
         }
