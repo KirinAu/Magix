@@ -66,9 +66,9 @@ const TIME_HIJACK_SCRIPT = `
 </script>
 `;
 
-const GSAP_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>`;
+const GSAP_CDN = `<script src="http://localhost:3001/libs/gsap.min.js"></script>`;
 
-const ANIME_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+const ANIME_CDN = `<script src="http://localhost:3001/libs/anime.min.js"></script>
 <script>
   (function() {
     const _anime = window.anime;
@@ -83,7 +83,7 @@ const ANIME_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3
 
 // PixiJS：加载后拦截 Application 构造函数，自动停止 ticker 并收集实例
 const PIXI_CDN = `${GSAP_CDN}
-<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>
+<script src="http://localhost:3001/libs/pixi.min.js"></script>
 <script>
   (function() {
     const _App = PIXI.Application;
@@ -100,7 +100,7 @@ const PIXI_CDN = `${GSAP_CDN}
 
 // Three.js：RAF 劫持已经处理 render loop，直接加载即可
 const THREE_CDN = `${GSAP_CDN}
-<script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js"></script>`;
+<script src="http://localhost:3001/libs/three.min.js"></script>`;
 
 function detectLibrary(code: string): "gsap" | "anime" | "pixi" | "three" {
   if (code.includes("THREE") || code.includes("three.js")) return "three";
