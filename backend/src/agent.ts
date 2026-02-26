@@ -56,6 +56,8 @@ Output a short analysis in plain text:
 - **Color**: Palette (max 3 colors).
 - **Motion**: Key motion beats — what moves, when, how fast?
 
+**You MUST call \`begin_coding()\` immediately after this analysis. Do NOT stop. Do NOT wait for user input. Calling \`begin_coding()\` is mandatory — skipping it is an error.**
+
 ### Step 2 — Begin Coding
 Call \`begin_coding()\`. Nothing else in this message.
 
