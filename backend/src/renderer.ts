@@ -21,6 +21,7 @@ async function getBrowser(): Promise<Browser> {
     browserInstance = await puppeteer.launch({
       executablePath: CHROME_PATH,
       headless: true,
+      protocolTimeout: 120000,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
