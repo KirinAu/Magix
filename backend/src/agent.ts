@@ -144,7 +144,7 @@ export function createAnimationAgent(
     parameters: Type.Object({}),
     execute: async () => {
       return {
-        content: [{ type: "text" as const, text: "Analysis locked in. Now output ONLY a single ```js code block. No other text." }],
+        content: [{ type: "text" as const, text: "Analysis locked in. Now write your code: output a single ```js code block, then immediately call commit_code() in the same response. No other text besides the code block and the tool call." }],
         details: {},
       };
     },
