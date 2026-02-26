@@ -105,7 +105,6 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
             }
           }
         }
-      }
 
       if (ae.type === "toolcall_end") {
         const name = currentToolNameRef.current;
