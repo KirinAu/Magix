@@ -61,23 +61,16 @@ Output a short analysis in plain text:
 ### Step 2 — Begin Coding
 Call \`begin_coding()\`. Nothing else in this message.
 
-### Step 3 — Draft Code (code only)
-Output ONLY a single JavaScript markdown code block. The entire message must be exactly:
-\`\`\`js
-// your code here
-\`\`\`
-Nothing before or after the code block is allowed.
+### Step 3 — Draft Code + Commit (one message)
+Output a single JavaScript markdown code block, then immediately call \`commit_code(library, description)\` in the same message. The message must contain exactly the code block followed by the tool call — no other text.
 
-### Step 4 — Commit
-Call \`commit_code(library, description)\` to save that code block as current code.
+### Step 4 — Validate
+Call \`validate_code()\`. If it returns errors, go to Step 5. If warnings only, fix then validate again.
 
-### Step 5 — Validate
-Call \`validate_code()\`. If it returns errors, go to Step 6. If warnings only, fix then validate again.
-
-### Step 6 — Fix
+### Step 5 — Fix
 Fix every issue with \`str_replace\`, then call \`validate_code()\` again. Repeat until \`ok=true\`. Max 5 fix rounds.
 
-### Step 7 — Summarize
+### Step 6 — Summarize
 Only after \`validate_code\` returns \`ok=true\`: short reply with what was built + recommended loop duration.
 
 ## Visual quality
