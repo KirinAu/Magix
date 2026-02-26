@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useRef, useEffect, useState } from "react";
-import { getDownloadUrl } from "@/lib/api";
+import { getVideoUrl } from "@/lib/api";
 import type { LogEntryKind, RenderParams } from "@/lib/types";
 
 const Editor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
@@ -14,7 +14,7 @@ interface CodePreviewPanelProps {
   onChange: (value: string) => void;
   tab: Tab;
   onTabChange: (tab: Tab) => void;
-  doneJobId: string | null;
+  videoUrl: string | null;
   renderParams: RenderParams;
   library: string;
   onPreviewLog: (kind: LogEntryKind, label: string, detail?: string) => void;
@@ -92,7 +92,7 @@ if (${JSON.stringify(inferredLibrary)} === "three") {
 }
 
 export default function CodePreviewPanel({
-  value, onChange, tab, onTabChange, doneJobId, renderParams, library, onPreviewLog,
+  value, onChange, tab, onTabChange, videoUrl, renderParams, library, onPreviewLog,
 }: CodePreviewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -159,7 +159,7 @@ export default function CodePreviewPanel({
           >
             预览
           </button>
-          {doneJobId && (
+          {videoUrl && (
             <button
               onClick={() => onTabChange("video")}
               className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${tab === "video" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
@@ -205,11 +205,11 @@ export default function CodePreviewPanel({
           </div>
         )}
 
-        {tab === "video" && doneJobId && (
+        {tab === "video" && videoUrl && (
           <div className="h-full flex flex-col items-center justify-center bg-black gap-4">
             <video
-              key={doneJobId}
-              src={getDownloadUrl(doneJobId)}
+              key={videoUrl}
+              src={videoUrl}
               controls
               autoPlay
               loop

@@ -1,3 +1,24 @@
+// ─── 用户 & 会话 ──────────────────────────────────────────────────────────────
+
+export interface UserInfo {
+  username: string;
+  createdAt: number;
+}
+
+export interface SessionInfo {
+  sessionId: string;
+  title: string;
+  code: string;
+  library: string;
+  videoPath: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SessionDetail extends SessionInfo {
+  messages: ChatMessage[];
+}
+
 // SSE 事件类型（来自 backend）
 export type AgentEventType =
   | "session_ready"

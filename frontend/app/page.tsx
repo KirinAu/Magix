@@ -6,7 +6,10 @@ import ChatPanel from "@/components/ChatPanel";
 import RenderPanel from "@/components/RenderPanel";
 import SettingsModal from "@/components/SettingsModal";
 import DebugPanel from "@/components/DebugPanel";
-import type { LLMConfig, RenderParams, LogEntry } from "@/lib/types";
+import LoginModal from "@/components/LoginModal";
+import SessionSidebar from "@/components/SessionSidebar";
+import { loadSession, getVideoUrl } from "@/lib/api";
+import type { LLMConfig, RenderParams, LogEntry, ChatMessage, UserInfo, SessionInfo } from "@/lib/types";
 
 const DEFAULT_CODE = `// 在这里写你的动画代码，或者让 AI 帮你生成
 // 支持 GSAP 和 Anime.js
@@ -39,16 +42,87 @@ for (let i = 0; i < 40; i++) {
 }`;
 
 export default function Home() {
+  const [user, setUser] = useState<UserInfo | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [sidebarRefreshTick, setSidebarRefreshTick] = useState(0);
+  const [initialMessages, setInitialMessages] = useState<ChatMessage[]>([]);
+
   const [code, setCode] = useState(DEFAULT_CODE);
   const [library, setLibrary] = useState("gsap");
   const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [doneJobId, setDoneJobId] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [tab, setTab] = useState<"code" | "preview" | "video">("code");
   const [renderParams, setRenderParams] = useState<RenderParams>({
     fps: 30, duration: 3, width: 1280, height: 720,
   });
   const [logs, setLogs] = useState<LogEntry[]>([]);
+
+  // 从 localStorage 恢复登录状态
+  useEffect(() => {
+    const saved = localStorage.getItem("me_user");
+    if (saved) {
+      try { setUser(JSON.parse(saved)); } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((data) => { if (data) setLlmConfig(data); })
+      .catch(() => {});
+  }, []);
+
+  function handleLogin(u: UserInfo) {
+    setUser(u);
+    localStorage.setItem("me_user", JSON.stringify(u));
+  }
+
+  function handleLogout() {
+    setUser(null);
+    localStorage.removeItem("me_user");
+    setActiveSessionId(null);
+    setInitialMessages([]);
+    resetWorkspace();
+  }
+
+  function resetWorkspace() {
+    setCode(DEFAULT_CODE);
+    setLibrary("gsap");
+    setVideoUrl(null);
+    setTab("code");
+    setLogs([]);
+  }
+
+  // 切换到已有会话
+  async function handleSelectSession(session: SessionInfo) {
+    if (!user) return;
+    if (session.sessionId === activeSessionId) return;
+
+    const detail = await loadSession(user.username, session.sessionId);
+    if (!detail) return;
+
+    setActiveSessionId(session.sessionId);
+    setInitialMessages(detail.messages as ChatMessage[]);
+    setCode(detail.code || DEFAULT_CODE);
+    setLibrary(detail.library || "gsap");
+    setVideoUrl(detail.videoPath ? getVideoUrl(detail.videoPath) : null);
+    setTab("code");
+    setLogs([]);
+  }
+
+  // 新建会话
+  function handleNewSession() {
+    setActiveSessionId(null);
+    setInitialMessages([]);
+    resetWorkspace();
+  }
+
+  // agent 创建了新 session 后，更新 activeSessionId 并刷新侧边栏
+  function handleSessionCreated(sessionId: string) {
+    setActiveSessionId(sessionId);
+    setSidebarRefreshTick((t) => t + 1);
+  }
 
   const handleLog = useCallback((entry: LogEntry) => {
     setLogs((prev) => [...prev, entry]);
@@ -73,13 +147,6 @@ export default function Home() {
     ]);
   }, []);
 
-  useEffect(() => {
-    fetch("/api/config")
-      .then((r) => r.json())
-      .then((data) => { if (data) setLlmConfig(data); })
-      .catch(() => {});
-  }, []);
-
   async function handleSaveConfig(config: LLMConfig) {
     setLlmConfig(config);
     await fetch("/api/config", {
@@ -92,15 +159,21 @@ export default function Home() {
   function handleCodeUpdate(newCode: string, newLibrary: string) {
     setCode(newCode);
     setLibrary(newLibrary);
+    // 代码更新后刷新侧边栏标题
+    setSidebarRefreshTick((t) => t + 1);
   }
 
-  function handleRenderDone(jobId: string) {
-    setDoneJobId(jobId);
+  function handleRenderDone(jobId: string, outputFile: string) {
+    setVideoUrl(getVideoUrl(outputFile));
     setTab("video");
+    setSidebarRefreshTick((t) => t + 1);
   }
 
   return (
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+      {/* 登录弹窗 */}
+      {!user && <LoginModal onLogin={handleLogin} />}
+
       <header className="h-14 bg-white border-b border-gray-100 flex items-center justify-between px-6 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 bg-gray-900 rounded-lg" />
@@ -108,22 +181,56 @@ export default function Home() {
           <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2.5 py-0.5">MVP</span>
         </div>
 
-        <button
-          onClick={() => setShowSettings(true)}
-          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-medium transition-colors ${
-            llmConfig
-              ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              : "bg-gray-900 text-white hover:bg-gray-700"
-          }`}
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${llmConfig ? "bg-green-500" : "bg-gray-400"}`} />
-          {llmConfig ? `${llmConfig.provider} · ${llmConfig.modelId}` : "配置 LLM"}
-        </button>
+        <div className="flex items-center gap-3">
+          {user && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">{user.username}</span>
+              <button
+                onClick={handleLogout}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                退出
+              </button>
+            </div>
+          )}
+          <button
+            onClick={() => setShowSettings(true)}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-medium transition-colors ${
+              llmConfig
+                ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                : "bg-gray-900 text-white hover:bg-gray-700"
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${llmConfig ? "bg-green-500" : "bg-gray-400"}`} />
+            {llmConfig ? `${llmConfig.provider} · ${llmConfig.modelId}` : "配置 LLM"}
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 flex gap-4 p-4 overflow-hidden">
-        <div className="w-96 shrink-0">
-          <ChatPanel onCodeUpdate={handleCodeUpdate} llmConfig={llmConfig} onLog={handleLog} onLogAppend={handleLogAppend} />
+        {/* 会话侧边栏 */}
+        {user && (
+          <div className="w-48 shrink-0">
+            <SessionSidebar
+              username={user.username}
+              activeSessionId={activeSessionId}
+              onSelect={handleSelectSession}
+              onNew={handleNewSession}
+              refreshTick={sidebarRefreshTick}
+            />
+          </div>
+        )}
+
+        <div className="w-80 shrink-0">
+          <ChatPanel
+            onCodeUpdate={handleCodeUpdate}
+            llmConfig={llmConfig}
+            onLog={handleLog}
+            onLogAppend={handleLogAppend}
+            username={user?.username}
+            initialMessages={initialMessages}
+            onSessionCreated={handleSessionCreated}
+          />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -132,7 +239,7 @@ export default function Home() {
             onChange={setCode}
             tab={tab}
             onTabChange={setTab}
-            doneJobId={doneJobId}
+            videoUrl={videoUrl}
             renderParams={renderParams}
             library={library}
             onPreviewLog={handlePreviewLog}
@@ -146,6 +253,8 @@ export default function Home() {
             params={renderParams}
             onParamsChange={setRenderParams}
             onRenderDone={handleRenderDone}
+            username={user?.username}
+            sessionId={activeSessionId ?? undefined}
           />
         </div>
       </main>

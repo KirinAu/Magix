@@ -9,18 +9,20 @@ interface RenderPanelProps {
   library: string;
   params: RenderParams;
   onParamsChange: (params: RenderParams) => void;
-  onRenderDone?: (jobId: string) => void;
+  onRenderDone?: (jobId: string, outputFile: string) => void;
+  username?: string;
+  sessionId?: string;
 }
 
 const PRESETS = [
   { label: "720p 30fps",  width: 1280, height: 720,  fps: 30 },
   { label: "1080p 30fps", width: 1920, height: 1080, fps: 30 },
   { label: "1080p 60fps", width: 1920, height: 1080, fps: 60 },
-  { label: "4K 30fps",    width: 3840, height: 2160, fps: 30 },
+  { label: "4K 60fps",    width: 3840, height: 2160, fps: 60 },
   { label: "Square 1:1", width: 1080, height: 1080, fps: 30 },
 ];
 
-export default function RenderPanel({ code, library, params, onParamsChange, onRenderDone }: RenderPanelProps) {
+export default function RenderPanel({ code, library, params, onParamsChange, onRenderDone, username, sessionId }: RenderPanelProps) {
   const [job, setJob] = useState<RenderJob | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -30,13 +32,13 @@ export default function RenderPanel({ code, library, params, onParamsChange, onR
     setJob(null);
 
     try {
-      const jobId = await submitRender({ code, library, ...params });
+      const jobId = await submitRender({ code, library, ...params, username, sessionId });
       const initialJob: RenderJob = { jobId, status: "pending", progress: 0, total: 0 };
       setJob(initialJob);
 
       watchRenderJob(jobId, (update) => {
         setJob({ jobId, ...update });
-        if (update.status === "done") onRenderDone?.(jobId);
+        if (update.status === "done") onRenderDone?.(jobId, update.outputFile ?? "");
       });
     } catch (err: any) {
       setJob({ jobId: "", status: "error", progress: 0, total: 0, error: err.message });

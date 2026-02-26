@@ -10,10 +10,13 @@ interface ChatPanelProps {
   llmConfig: LLMConfig | null;
   onLog: (entry: LogEntry) => void;
   onLogAppend: (id: string, delta: string) => void;
+  username?: string;
+  initialMessages?: ChatMessage[];
+  onSessionCreated?: (sessionId: string) => void;
 }
 
-export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend }: ChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend, username, initialMessages, onSessionCreated }: ChatPanelProps) {
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? []);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [assistantText, setAssistantText] = useState("");
@@ -28,6 +31,16 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend 
   const thinkingTextRef = useRef<string>("");
 
   function mkId() { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
+
+  useEffect(() => {
+    // 切换会话时重置状态
+    setMessages(initialMessages ?? []);
+    sessionIdRef.current = null;
+    assistantTextRef.current = "";
+    setAssistantText("");
+    setIsStreaming(false);
+    setToolStatus(null);
+  }, [initialMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -200,8 +213,9 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend 
 
   async function ensureSession() {
     if (sessionIdRef.current || !llmConfig) return;
-    const { sessionId } = await startSession(llmConfig, handleEvent);
+    const { sessionId } = await startSession(llmConfig, handleEvent, username);
     sessionIdRef.current = sessionId;
+    onSessionCreated?.(sessionId);
   }
 
   async function handleAbort() {
