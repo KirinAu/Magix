@@ -59,6 +59,7 @@ export interface LLMConfig {
   modelId: string;
   apiKey: string;
   baseUrl?: string;
+  stripThinking?: boolean;
 }
 
 export interface SavedModel {

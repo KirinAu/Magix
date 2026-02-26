@@ -260,6 +260,16 @@ export function createAnimationAgent(
       tools: [readCodeTool, beginCodingTool, commitCodeTool, strReplaceTool, validateCodeTool],
     },
     getApiKey: () => config.apiKey,
+    convertToLlm: (messages: any[]) => {
+      if (!config.stripThinking) return messages;
+      return messages.map((msg: any) => {
+        if (msg.role !== "assistant") return msg;
+        return {
+          ...msg,
+          content: (msg.content ?? []).filter((b: any) => b.type !== "thinking"),
+        };
+      });
+    },
   });
 
   agent.subscribe((event: AgentEvent) => {

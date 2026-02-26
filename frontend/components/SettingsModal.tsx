@@ -35,6 +35,7 @@ export default function SettingsModal({ config, onSave, onClose }: SettingsModal
   const [apiKey, setApiKey] = useState(config?.apiKey ?? "");
   const [baseUrl, setBaseUrl] = useState(config?.baseUrl ?? "");
   const [name, setName] = useState("");
+  const [stripThinking, setStripThinking] = useState(config?.stripThinking ?? false);
 
   function handleProviderChange(p: string) {
     setProvider(p);
@@ -59,6 +60,7 @@ export default function SettingsModal({ config, onSave, onClose }: SettingsModal
       modelId: modelId.trim(),
       apiKey: apiKey.trim(),
       baseUrl: baseUrl.trim() || undefined,
+      stripThinking,
     };
     // 保存到列表
     if (name.trim()) {
@@ -196,6 +198,20 @@ export default function SettingsModal({ config, onSave, onClose }: SettingsModal
               placeholder={preset?.baseUrl || "https://your-endpoint/v1"}
               className="w-full rounded-xl bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-200"
             />
+          </div>
+
+          {/* Strip Thinking */}
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-medium text-gray-700">不回放 thinking 到上下文</div>
+              <div className="text-xs text-gray-400 mt-0.5">开启后 thinking block 不会传给下一轮模型</div>
+            </div>
+            <button
+              onClick={() => setStripThinking(!stripThinking)}
+              className={`relative w-10 h-6 rounded-full transition-colors ${stripThinking ? "bg-gray-900" : "bg-gray-200"}`}
+            >
+              <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${stripThinking ? "translate-x-5" : "translate-x-1"}`} />
+            </button>
           </div>
         </div>
 
