@@ -10,6 +10,7 @@ export interface LLMConfig {
   modelId: string;
   apiKey: string;
   baseUrl?: string;
+  stripThinking?: boolean;
 }
 
 const SYSTEM_PROMPT = `You are an expert animation developer. Write high-quality, creative animation code for a browser sandbox.
