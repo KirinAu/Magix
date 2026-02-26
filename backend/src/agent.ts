@@ -40,38 +40,42 @@ document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 
 ## Tools
 - **read_code()** — read current committed code before str_replace.
+- **begin_coding()** — call this after analysis to signal you are ready to write code. No parameters.
 - **commit_code(library, description)** — commit the latest JavaScript code block you just wrote in assistant text.
 - **str_replace(old_str, new_str, description)** — targeted edit on committed code. \`old_str\` must be unique and exact.
 - **validate_code()** — runs static + browser runtime checks on committed code. Returns \`ok\`, \`errors\`, \`warnings\`. **You MUST call this after every commit_code or str_replace. You MUST NOT finish until validate_code returns ok=true.**
 
 ## Workflow
-**IMPORTANT: Always follow these steps in order. Do NOT call any tool until Step 1 is complete.**
+**IMPORTANT: Follow these steps in strict order. Each step is a separate message.**
 
 ### Step 1 — Analyze (text only, no tool calls)
-Before writing any code, output a short analysis in plain text:
+Output a short analysis in plain text:
 - **Intent**: What is the user really asking for? What mood, style, feeling?
 - **Library**: Which library and why?
 - **Concept**: Core visual idea in one sentence.
 - **Color**: Palette (max 3 colors).
 - **Motion**: Key motion beats — what moves, when, how fast?
 
-### Step 2 — Draft Code (text output, code only)
-Output ONLY a single JavaScript markdown code block. No analysis, no explanation, no other text — the entire message must be exactly:
+### Step 2 — Begin Coding
+Call \`begin_coding()\`. Nothing else in this message.
+
+### Step 3 — Draft Code (code only)
+Output ONLY a single JavaScript markdown code block. The entire message must be exactly:
 \`\`\`js
 // your code here
 \`\`\`
 Nothing before or after the code block is allowed.
 
-### Step 3 — Commit
-Immediately call \`commit_code(library, description)\` to save that code block as current code.
+### Step 4 — Commit
+Call \`commit_code(library, description)\` to save that code block as current code.
 
-### Step 4 — Validate
-Call \`validate_code()\`. If it returns errors, go to Step 5. If warnings only, fix then validate again.
+### Step 5 — Validate
+Call \`validate_code()\`. If it returns errors, go to Step 6. If warnings only, fix then validate again.
 
-### Step 5 — Fix
+### Step 6 — Fix
 Fix every issue with \`str_replace\`, then call \`validate_code()\` again. Repeat until \`ok=true\`. Max 5 fix rounds.
 
-### Step 6 — Summarize
+### Step 7 — Summarize
 Only after \`validate_code\` returns \`ok=true\`: short reply with what was built + recommended loop duration.
 
 ## Visual quality
@@ -134,6 +138,19 @@ export function createAnimationAgent(
       return {
         content: [{ type: "text" as const, text: currentCode ? `Current code:\n\`\`\`js\n${currentCode}\n\`\`\`` : "No code written yet." }],
         details: { code: currentCode },
+      };
+    },
+  };
+
+  const beginCodingTool: AgentTool<any> = {
+    name: "begin_coding",
+    label: "Begin Coding",
+    description: "Call this after your analysis to signal you are ready to write code. No parameters.",
+    parameters: Type.Object({}),
+    execute: async () => {
+      return {
+        content: [{ type: "text" as const, text: "Analysis locked in. Now output ONLY a single ```js code block. No other text." }],
+        details: {},
       };
     },
   };
@@ -238,7 +255,7 @@ export function createAnimationAgent(
     initialState: {
       systemPrompt: SYSTEM_PROMPT,
       model,
-      tools: [readCodeTool, commitCodeTool, strReplaceTool, validateCodeTool],
+      tools: [readCodeTool, beginCodingTool, commitCodeTool, strReplaceTool, validateCodeTool],
     },
     getApiKey: () => config.apiKey,
   });
