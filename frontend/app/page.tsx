@@ -60,6 +60,19 @@ export default function Home() {
     ));
   }, []);
 
+  const handlePreviewLog = useCallback((kind: LogEntry["kind"], label: string, detail?: string) => {
+    setLogs((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        kind,
+        label,
+        detail,
+        timestamp: Date.now(),
+      },
+    ]);
+  }, []);
+
   useEffect(() => {
     fetch("/api/config")
       .then((r) => r.json())
@@ -122,6 +135,7 @@ export default function Home() {
             doneJobId={doneJobId}
             renderParams={renderParams}
             library={library}
+            onPreviewLog={handlePreviewLog}
           />
         </div>
 

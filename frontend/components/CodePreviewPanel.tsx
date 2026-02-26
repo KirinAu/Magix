@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useRef, useEffect, useState } from "react";
 import { getDownloadUrl } from "@/lib/api";
-import type { RenderParams } from "@/lib/types";
+import type { LogEntryKind, RenderParams } from "@/lib/types";
 
 const Editor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -17,12 +17,40 @@ interface CodePreviewPanelProps {
   doneJobId: string | null;
   renderParams: RenderParams;
   library: string;
+  onPreviewLog: (kind: LogEntryKind, label: string, detail?: string) => void;
 }
 
-const GSAP_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>`;
-const ANIME_CDN = `<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>`;
-const PIXI_CDN = `${GSAP_CDN}<script src="https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js"></script>`;
-const THREE_CDN = (origin: string) => `${GSAP_CDN}<script src="${origin}/libs/three.min.js"></script><script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>`;
+const DEBUG_BRIDGE = `<script>
+window.__previewEmit = function(type, payload) {
+  try {
+    parent.postMessage({ source: "magiceffect-preview", type, payload }, "*");
+  } catch {}
+};
+window.addEventListener("error", function(e) {
+  window.__previewEmit("runtime_error", {
+    message: e.message,
+    filename: e.filename,
+    lineno: e.lineno,
+    colno: e.colno,
+    stack: e.error && e.error.stack ? e.error.stack : ""
+  });
+});
+window.addEventListener("unhandledrejection", function(e) {
+  var reason = e.reason;
+  window.__previewEmit("unhandled_rejection", {
+    message: typeof reason === "string" ? reason : (reason && reason.message ? reason.message : "unhandled rejection")
+  });
+});
+</script>`;
+
+function scriptWithProbe(src: string, name: string): string {
+  return `<script src="${src}" onload="window.__previewEmit && window.__previewEmit('script_loaded', { name: '${name}', src: this.src })" onerror="window.__previewEmit && window.__previewEmit('script_error', { name: '${name}', src: this.src })"></script>`;
+}
+
+const GSAP_CDN = scriptWithProbe("https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js", "gsap");
+const ANIME_CDN = scriptWithProbe("https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js", "anime");
+const PIXI_CDN = `${GSAP_CDN}${scriptWithProbe("https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js", "pixi")}`;
+const THREE_CDN = (origin: string) => `${GSAP_CDN}${scriptWithProbe(`${origin}/libs/three.min.js`, "three_local")}${scriptWithProbe("https://unpkg.com/three@0.160.0/build/three.min.js", "three_cdn")}`;
 
 function buildPreviewHtml(code: string, library: string, width: number, height: number): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -33,19 +61,33 @@ function buildPreviewHtml(code: string, library: string, width: number, height: 
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>* { margin:0; padding:0; box-sizing:border-box; } html,body { width:100vw; height:100vh; overflow:hidden; background:#000; }</style>
+${DEBUG_BRIDGE}
 ${libScript}
 </head><body>
 <script>
 window.CANVAS_WIDTH = ${width};
 window.CANVAS_HEIGHT = ${height};
 window.SCALE = Math.min(${width} / 1280, ${height} / 720);
+window.__previewEmit("preview_boot", {
+  library: ${JSON.stringify(library)},
+  width: ${width},
+  height: ${height},
+  origin: ${JSON.stringify(origin)}
+});
 ${code}
+if (${JSON.stringify(library)} === "three") {
+  setTimeout(function() {
+    if (!window.THREE) {
+      window.__previewEmit("three_missing", { message: "THREE is still undefined after script load." });
+    }
+  }, 0);
+}
 </script>
 </body></html>`;
 }
 
 export default function CodePreviewPanel({
-  value, onChange, tab, onTabChange, doneJobId, renderParams, library,
+  value, onChange, tab, onTabChange, doneJobId, renderParams, library, onPreviewLog,
 }: CodePreviewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -64,6 +106,33 @@ export default function CodePreviewPanel({
     if (containerRef.current) ro.observe(containerRef.current);
     return () => ro.disconnect();
   }, [tab, width, height]);
+
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      const data = event.data;
+      if (!data || data.source !== "magiceffect-preview") return;
+
+      const payload = data.payload ? JSON.stringify(data.payload) : undefined;
+      if (data.type === "script_error") {
+        onPreviewLog("error", `preview script load failed: ${data.payload?.name ?? "unknown"}`, payload);
+        return;
+      }
+      if (data.type === "runtime_error" || data.type === "unhandled_rejection" || data.type === "three_missing") {
+        onPreviewLog("error", `preview runtime error: ${data.payload?.message ?? data.type}`, payload);
+        return;
+      }
+      if (data.type === "script_loaded") {
+        onPreviewLog("info", `preview script loaded: ${data.payload?.name ?? "unknown"}`, payload);
+        return;
+      }
+      if (data.type === "preview_boot") {
+        onPreviewLog("info", `preview boot (${data.payload?.library ?? "unknown"})`, payload);
+      }
+    }
+
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [onPreviewLog]);
 
   const previewHtml = tab === "preview"
     ? buildPreviewHtml(value, library, width, height)
