@@ -154,6 +154,7 @@ export function createAnimationAgent(
 ): { agent: Agent; setRes: (r: Response) => void } {
   // 维护当前代码状态（session 级别）
   let currentCode = "";
+  let currentLibrary = "gsap";
   let res = initialRes;
 
   const readCodeTool: AgentTool<any> = {
@@ -183,6 +184,7 @@ export function createAnimationAgent(
     }),
     execute: async (_toolCallId, params) => {
       currentCode = params.code;
+      currentLibrary = params.library;
       // 通知前端完整代码（toolcall_delta 已经流式更新了，这里做最终确认）
       sendSSE(res, {
         type: "code_update",
@@ -224,7 +226,7 @@ export function createAnimationAgent(
       sendSSE(res, {
         type: "code_update",
         code: currentCode,
-        library: "gsap", // 保持当前库不变
+        library: currentLibrary,
         mode: "patch",
       });
 
