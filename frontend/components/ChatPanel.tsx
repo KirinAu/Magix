@@ -70,7 +70,25 @@ export default function ChatPanel({ onCodeUpdate, llmConfig }: ChatPanelProps) {
         setAssistantText(assistantTextRef.current);
       }
 
-      if (ae.type === "toolcall_start") {
+      if (ae.type === "toolcall_delta") {
+        if (currentToolNameRef.current === "write_code") {
+          // 从 partial arguments 里提取正在流式构建的 code 字段
+          const toolCall = ae.partial?.content
+            ?.slice()
+            .reverse()
+            .find((c: any) => c.type === "toolCall" && c.name === "write_code");
+          if (toolCall?.arguments) {
+            const match = toolCall.arguments.match(/"code"\s*:\s*"((?:[^"\\]|\\.)*)/)
+            if (match) {
+              // 反转 JSON 转义
+              const partialCode = match[1].replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+              onCodeUpdate(partialCode, "gsap");
+            }
+          }
+        }
+      }
+
+      
         const partial = ae.partial;
         if (partial?.content) {
           const lastToolCall = [...partial.content]
