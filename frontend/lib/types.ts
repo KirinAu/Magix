@@ -61,6 +61,12 @@ export interface LLMConfig {
   baseUrl?: string;
 }
 
+export interface SavedModel {
+  id: string;
+  name: string;
+  config: LLMConfig;
+}
+
 export type LogEntryKind = "info" | "thinking" | "tool" | "error" | "request";
 
 export interface LogEntry {
