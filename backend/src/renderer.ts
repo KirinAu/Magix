@@ -50,7 +50,7 @@ export async function renderFrames(
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
 
     // 加载 HTML（data URL 方式，不需要起 HTTP server）
-    await page.setContent(html, { waitUntil: "networkidle0", timeout: 15000 });
+    await page.setContent(html, { waitUntil: "load", timeout: 60000 });
 
     const framePaths: string[] = [];
 
