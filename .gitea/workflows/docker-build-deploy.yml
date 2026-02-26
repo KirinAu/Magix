@@ -140,6 +140,7 @@ jobs:
           fi
 
       - name: Clean Docker builder cache
+        if: ${{ steps.backend_deps.outputs.exists != 'true' || steps.frontend_deps.outputs.exists != 'true' }}
         run: docker builder prune -f
 
       - name: Build and push backend deps image
