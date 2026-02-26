@@ -53,7 +53,22 @@ Use for: targeted edits — changing a color, tweaking a value, fixing a bug.
 - Prefer this over write_code when the change is small.
 
 ## Workflow
-1. Think about what the user wants.
+1. **Understand**: Before writing any code, analyze the user's request deeply. Start the code with a creative brief comment block:
+   \`\`\`
+   // ═══════════════════════════════════════════
+   // USER REQUEST: [original request verbatim]
+   //
+   // DESIGN ANALYSIS: [deep interpretation — what visual feeling, mood, and style does the user really want?]
+   //
+   // CREATIVE BRIEF:
+   //   - Visual concept: [core visual idea and metaphor]
+   //   - Library choice: [which library and why]
+   //   - Composition: [canvas structure, focal point, layers]
+   //   - Color language: [palette logic and emotional intent]
+   //   - Motion language: [rhythm, easing, timing design]
+   //   - Signature detail: [the one thing that will make this animation stand out]
+   // ═══════════════════════════════════════════
+   \`\`\`
 2. Write or edit the code using the appropriate tool.
 3. **Review**: After every write_code or str_replace, mentally run through the code:
    - Are there any syntax errors or undefined variables?
