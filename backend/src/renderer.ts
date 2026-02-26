@@ -66,7 +66,20 @@ export async function renderFrames(
       await page.evaluate(() => new Promise((r) => setTimeout(r, 0)));
 
       const framePath = path.join(outputDir, `frame_${String(i).padStart(6, "0")}.png`);
-      await page.screenshot({ path: framePath as `${string}.png`, type: "png" });
+
+      // 截图加重试，偶发重帧超时时自动恢复
+      let attempts = 0;
+      while (true) {
+        try {
+          await page.screenshot({ path: framePath as `${string}.png`, type: "png" });
+          break;
+        } catch (err: any) {
+          attempts++;
+          if (attempts >= 3) throw err;
+          // 等 500ms 再试
+          await new Promise((r) => setTimeout(r, 500));
+        }
+      }
       framePaths.push(framePath);
 
       onProgress?.(i + 1, totalFrames);
