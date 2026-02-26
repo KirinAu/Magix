@@ -25,6 +25,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
   const thinkingLogIdRef = useRef<string | null>(null);
+  const thinkingTextRef = useRef<string>("");
 
   function mkId() { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 
@@ -91,16 +92,26 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend 
       if (ae.type === "thinking_start") {
         const id = mkId();
         thinkingLogIdRef.current = id;
+        thinkingTextRef.current = "";
         onLog({ id, kind: "thinking", label: "", timestamp: Date.now() });
       }
 
       if (ae.type === "thinking_delta") {
+        thinkingTextRef.current += ae.delta;
         if (thinkingLogIdRef.current) {
           onLogAppend(thinkingLogIdRef.current, ae.delta);
         }
       }
 
       if (ae.type === "thinking_end") {
+        const text = thinkingTextRef.current.trim();
+        if (text) {
+          setMessages((prev) => [
+            ...prev,
+            { id: mkId(), role: "thinking", content: text, timestamp: Date.now() },
+          ]);
+        }
+        thinkingTextRef.current = "";
         thinkingLogIdRef.current = null;
       }
 
@@ -249,6 +260,11 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend 
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
                 <span className="text-xs text-gray-400">{msg.content}</span>
               </div>
+            ) : msg.role === "thinking" ? (
+              <details className="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-2.5 bg-gray-50 border border-gray-100">
+                <summary className="text-xs text-gray-400 cursor-pointer select-none">思考过程</summary>
+                <p className="mt-2 text-xs text-gray-400 whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+              </details>
             ) : (
               <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
                 msg.role === "user"

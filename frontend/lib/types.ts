@@ -20,7 +20,7 @@ export interface SSEEvent {
 
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant" | "tool";
+  role: "user" | "assistant" | "tool" | "thinking";
   content: string;
   toolName?: string;
   timestamp: number;
