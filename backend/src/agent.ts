@@ -46,6 +46,7 @@ document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 \`\`\`
 
 ## Tools
+- **begin_coding(plan)** — signal analysis is done and coding is starting. Call this after Step 1.
 - **read_code()** — read current committed code before str_replace.
 - **commit_code(code, library, description)** — commit JavaScript code directly via the \`code\` parameter. Do NOT output a markdown code block separately; pass the full code as the \`code\` argument.
 - **str_replace(old_str, new_str, description)** — targeted edit on committed code. \`old_str\` must be unique and exact.
@@ -62,16 +63,19 @@ Output a short analysis in plain text:
 - **Color**: Palette (max 3 colors).
 - **Motion**: Key motion beats — what moves, when, how fast?
 
-### Step 2 — Commit Code
+### Step 2 — Signal
+Call \`begin_coding(plan)\` with a one-sentence plan.
+
+### Step 3 — Commit Code
 Call \`commit_code(code, library, description)\` with the complete JavaScript code in the \`code\` parameter.
 
-### Step 3 — Validate
-Call \`validate_code()\`. If it returns errors, go to Step 4. If warnings only, fix then validate again.
+### Step 4 — Validate
+Call \`validate_code()\`. If it returns errors, go to Step 5. If warnings only, fix then validate again.
 
-### Step 4 — Fix
+### Step 5 — Fix
 Fix every issue with \`str_replace\`, then call \`validate_code()\` again. Repeat until \`ok=true\`. Max 5 fix rounds.
 
-### Step 5 — Summarize
+### Step 6 — Summarize
 Only after \`validate_code\` returns \`ok=true\`: short reply with what was built + recommended loop duration.
 
 ## Visual quality
@@ -129,6 +133,22 @@ export async function createAnimationAgent(
     }
     return last ? last.trim() : null;
   }
+
+  const beginCodingTool: ToolDefinition<any> = {
+    name: "begin_coding",
+    label: "Begin Coding",
+    description: "Signal that analysis is complete and coding is about to start. Call this after Step 1 analysis, before commit_code.",
+    parameters: Type.Object({
+      plan: Type.String({ description: "One sentence summary of what you are about to build" }),
+    }),
+    execute: async (_toolCallId, params) => {
+      sendSSE(res, { type: "begin_coding", plan: params.plan });
+      return {
+        content: [{ type: "text" as const, text: `Coding started: ${params.plan}. Now call commit_code with the complete code.` }],
+        details: { plan: params.plan },
+      };
+    },
+  };
 
   const readCodeTool: ToolDefinition<any> = {
     name: "read_code",
@@ -237,7 +257,7 @@ export async function createAnimationAgent(
   const { session } = await createAgentSession({
     model,
     tools: [],
-    customTools: [readCodeTool, commitCodeTool, strReplaceTool, validateCodeTool],
+    customTools: [beginCodingTool, readCodeTool, commitCodeTool, strReplaceTool, validateCodeTool],
     sessionManager: SessionManager.inMemory(),
     authStorage,
     resourceLoader,
