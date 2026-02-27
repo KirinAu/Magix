@@ -74,6 +74,8 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
     if (type === "error") {
       setIsStreaming(false);
       setToolStatus(null);
+      // 清掉坏掉的 session，下次发消息重新建
+      sessionIdRef.current = null;
       const errMsg = event.message || "未知错误";
       onLog({ id: mkId(), kind: "error", label: errMsg, timestamp: Date.now() });
       setMessages((prev) => [
