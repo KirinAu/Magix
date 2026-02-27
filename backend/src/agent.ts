@@ -1,9 +1,14 @@
 import type { AgentSessionEvent, ToolDefinition } from "@mariozechner/pi-coding-agent";
-import { createAgentSession, SessionManager, AuthStorage } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
 import { Response } from "express";
 import { validateCode } from "./validator";
+
+// 动态 import ESM 包
+async function loadCodingAgent() {
+  const mod = await import("@mariozechner/pi-coding-agent");
+  return mod;
+}
 
 export interface LLMConfig {
   provider: string;
@@ -217,6 +222,7 @@ export async function createAnimationAgent(
   };
 
   const model = buildModel(config);
+  const { createAgentSession, SessionManager, AuthStorage } = await loadCodingAgent();
   const authStorage = AuthStorage.create();
   authStorage.set(config.provider, { type: "api_key", key: config.apiKey });
 
