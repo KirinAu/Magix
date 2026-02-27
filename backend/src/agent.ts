@@ -1,5 +1,5 @@
-import { Agent } from "@mariozechner/pi-agent-core";
-import type { AgentTool, AgentEvent } from "@mariozechner/pi-agent-core";
+import type { AgentSessionEvent, ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { createAgentSession, SessionManager, AuthStorage } from "@mariozechner/pi-coding-agent";
 import type { Model } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
 import { Response } from "express";
@@ -41,13 +41,12 @@ document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 
 ## Tools
 - **read_code()** — read current committed code before str_replace.
-- **begin_coding()** — call this after analysis to signal you are ready to write code. No parameters.
 - **commit_code(library, description)** — commit the latest JavaScript code block you just wrote in assistant text.
 - **str_replace(old_str, new_str, description)** — targeted edit on committed code. \`old_str\` must be unique and exact.
 - **validate_code()** — runs static + browser runtime checks on committed code. Returns \`ok\`, \`errors\`, \`warnings\`. **You MUST call this after every commit_code or str_replace. You MUST NOT finish until validate_code returns ok=true.**
 
 ## Workflow
-**IMPORTANT: Follow these steps in strict order. Each step is a separate message.**
+**IMPORTANT: Follow these steps in strict order.**
 
 ### Step 1 — Analyze (text only, no tool calls)
 Output a short analysis in plain text:
@@ -57,21 +56,16 @@ Output a short analysis in plain text:
 - **Color**: Palette (max 3 colors).
 - **Motion**: Key motion beats — what moves, when, how fast?
 
-**You MUST call \`begin_coding()\` immediately after this analysis. Do NOT stop. Do NOT wait for user input. Calling \`begin_coding()\` is mandatory — skipping it is an error.**
+### Step 2 — Draft Code + Commit (one message)
+Output a single JavaScript markdown code block, then immediately call \`commit_code(library, description)\` in the same message.
 
-### Step 2 — Begin Coding
-Call \`begin_coding()\`. Nothing else in this message.
+### Step 3 — Validate
+Call \`validate_code()\`. If it returns errors, go to Step 4. If warnings only, fix then validate again.
 
-### Step 3 — Draft Code + Commit (one message)
-Output a single JavaScript markdown code block, then immediately call \`commit_code(library, description)\` in the same message. The message must contain exactly the code block followed by the tool call — no other text.
-
-### Step 4 — Validate
-Call \`validate_code()\`. If it returns errors, go to Step 5. If warnings only, fix then validate again.
-
-### Step 5 — Fix
+### Step 4 — Fix
 Fix every issue with \`str_replace\`, then call \`validate_code()\` again. Repeat until \`ok=true\`. Max 5 fix rounds.
 
-### Step 6 — Summarize
+### Step 5 — Summarize
 Only after \`validate_code\` returns \`ok=true\`: short reply with what was built + recommended loop duration.
 
 ## Visual quality
@@ -83,7 +77,6 @@ Only after \`validate_code\` returns \`ok=true\`: short reply with what was buil
 - **Restraint**: one idea, executed with precision. When in doubt, remove an element.
 
 Respond in the same language the user writes in.`;
-
 
 function buildModel(config: LLMConfig): Model<any> {
   const isAnthropic = config.provider === "anthropic";
@@ -112,11 +105,10 @@ function buildModel(config: LLMConfig): Model<any> {
   };
 }
 
-export function createAnimationAgent(
+export async function createAnimationAgent(
   config: LLMConfig,
   initialRes: Response
-): { agent: Agent; setRes: (r: Response) => void } {
-  // 维护当前代码状态（session 级别）
+): Promise<{ session: any; setRes: (r: Response) => void }> {
   let currentCode = "";
   let currentLibrary = "gsap";
   let assistantDraftText = "";
@@ -132,7 +124,7 @@ export function createAnimationAgent(
     return last ? last.trim() : null;
   }
 
-  const readCodeTool: AgentTool<any> = {
+  const readCodeTool: ToolDefinition<any> = {
     name: "read_code",
     label: "Read Current Code",
     description: "Returns the current animation code. Use this before str_replace to verify the exact content.",
@@ -145,20 +137,7 @@ export function createAnimationAgent(
     },
   };
 
-  const beginCodingTool: AgentTool<any> = {
-    name: "begin_coding",
-    label: "Begin Coding",
-    description: "Call this after your analysis to signal you are ready to write code. No parameters.",
-    parameters: Type.Object({}),
-    execute: async () => {
-      return {
-        content: [{ type: "text" as const, text: "Analysis locked in. Now write your code: output a single ```js code block, then immediately call commit_code() in the same response. No other text besides the code block and the tool call." }],
-        details: {},
-      };
-    },
-  };
-
-  const commitCodeTool: AgentTool<any> = {
+  const commitCodeTool: ToolDefinition<any> = {
     name: "commit_code",
     label: "Commit Draft Code",
     description: "Commit the latest JavaScript markdown code block from assistant text into current editable code.",
@@ -189,7 +168,7 @@ export function createAnimationAgent(
     },
   };
 
-  const strReplaceTool: AgentTool<any> = {
+  const strReplaceTool: ToolDefinition<any> = {
     name: "str_replace",
     label: "Edit Code",
     description: "Replace an exact substring in the current code. Use for targeted edits.",
@@ -199,27 +178,12 @@ export function createAnimationAgent(
       description: Type.String({ description: "Brief description of what this change does" }),
     }),
     execute: async (_toolCallId, params) => {
-      if (!currentCode) {
-        throw new Error("No committed code exists yet. Use commit_code first.");
-      }
-
+      if (!currentCode) throw new Error("No committed code exists yet. Use commit_code first.");
       const count = currentCode.split(params.old_str).length - 1;
-      if (count === 0) {
-        throw new Error(`old_str not found in current code. Make sure it matches exactly.`);
-      }
-      if (count > 1) {
-        throw new Error(`old_str matches ${count} times. Provide a more unique string.`);
-      }
-
+      if (count === 0) throw new Error(`old_str not found in current code. Make sure it matches exactly.`);
+      if (count > 1) throw new Error(`old_str matches ${count} times. Provide a more unique string.`);
       currentCode = currentCode.replace(params.old_str, params.new_str);
-
-      sendSSE(res, {
-        type: "code_update",
-        code: currentCode,
-        library: currentLibrary,
-        mode: "patch",
-      });
-
+      sendSSE(res, { type: "code_update", code: currentCode, library: currentLibrary, mode: "patch" });
       return {
         content: [{ type: "text" as const, text: `Applied edit: ${params.description}` }],
         details: { ...params, resultCode: currentCode },
@@ -227,10 +191,10 @@ export function createAnimationAgent(
     },
   };
 
-  const validateCodeTool: AgentTool<any> = {
+  const validateCodeTool: ToolDefinition<any> = {
     name: "validate_code",
     label: "Validate Code",
-    description: "Runs static checks and browser runtime checks on the current animation code. Returns ok=true only when there are no errors. You MUST call this after every commit_code or str_replace, and MUST NOT finish until ok=true.",
+    description: "Runs static checks and browser runtime checks on the current animation code. Returns ok=true only when there are no errors.",
     parameters: Type.Object({}),
     execute: async () => {
       if (!currentCode) {
@@ -242,8 +206,8 @@ export function createAnimationAgent(
       const result = await validateCode(currentCode, currentLibrary);
       const lines: string[] = [];
       lines.push(`ok: ${result.ok}`);
-      if (result.errors.length) lines.push(`errors:\n${result.errors.map(e => `  - ${e}`).join("\n")}`);
-      if (result.warnings.length) lines.push(`warnings:\n${result.warnings.map(w => `  - ${w}`).join("\n")}`);
+      if (result.errors.length) lines.push(`errors:\n${result.errors.map((e: string) => `  - ${e}`).join("\n")}`);
+      if (result.warnings.length) lines.push(`warnings:\n${result.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
       if (result.ok) lines.push("All checks passed. You may now summarize.");
       return {
         content: [{ type: "text" as const, text: lines.join("\n") }],
@@ -253,27 +217,21 @@ export function createAnimationAgent(
   };
 
   const model = buildModel(config);
+  const authStorage = AuthStorage.create();
+  authStorage.set(config.provider, { type: "api_key", key: config.apiKey });
 
-  const agent = new Agent({
-    initialState: {
-      systemPrompt: SYSTEM_PROMPT,
-      model,
-      tools: [readCodeTool, beginCodingTool, commitCodeTool, strReplaceTool, validateCodeTool],
-    },
-    getApiKey: () => config.apiKey,
-    convertToLlm: (messages: any[]) => {
-      if (!config.stripThinking) return messages;
-      return messages.map((msg: any) => {
-        if (msg.role !== "assistant") return msg;
-        return {
-          ...msg,
-          content: (msg.content ?? []).filter((b: any) => b.type !== "thinking"),
-        };
-      });
-    },
+  const { session } = await createAgentSession({
+    model,
+    tools: [],  // 不用内置工具
+    customTools: [readCodeTool, commitCodeTool, strReplaceTool, validateCodeTool],
+    sessionManager: SessionManager.inMemory(),
+    authStorage,
   });
 
-  agent.subscribe((event: AgentEvent) => {
+  // 覆盖 system prompt
+  (session as any).agent.state.systemPrompt = SYSTEM_PROMPT;
+
+  session.subscribe((event: AgentSessionEvent) => {
     if (event.type === "agent_start") {
       assistantDraftText = "";
     }
@@ -283,9 +241,8 @@ export function createAnimationAgent(
         assistantDraftText += ae.delta ?? "";
       }
     }
-    // 如果是错误结束，提取错误信息发给前端
     if (event.type === "agent_end") {
-      const lastMsg = event.messages[event.messages.length - 1] as any;
+      const lastMsg = (event as any).messages?.[(event as any).messages.length - 1] as any;
       if (lastMsg?.stopReason === "error") {
         console.error("[agent_end error] lastMsg:", JSON.stringify(lastMsg, null, 2));
         const errText = lastMsg.content
@@ -301,7 +258,7 @@ export function createAnimationAgent(
     }
   });
 
-  return { agent, setRes: (r: Response) => { res = r; } };
+  return { session, setRes: (r: Response) => { res = r; } };
 }
 
 export function sendSSE(res: Response, data: unknown): void {

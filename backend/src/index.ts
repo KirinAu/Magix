@@ -6,7 +6,6 @@ import { v4 as uuidv4 } from "uuid";
 import { createAnimationAgent, sendSSE, type LLMConfig } from "./agent";
 import { renderFrames } from "./renderer";
 import { encodeToMp4, cleanupFrames } from "./encoder";
-import type { Agent } from "@mariozechner/pi-agent-core";
 import {
   ensureUser,
   createSession,
@@ -18,7 +17,7 @@ import {
 } from "./store";
 
 interface Session {
-  agent: Agent;
+  agent: any;
   setRes: (r: import("express").Response) => void;
   username: string;
   messages: StoredMessage[];
@@ -115,7 +114,7 @@ const sessions = new Map<string, Session>();
  * 创建新的 Agent 会话，返回 sessionId
  * Body: LLMConfig + { username }
  */
-app.post("/api/chat/start", (req, res) => {
+app.post("/api/chat/start", async (req, res) => {
   const { username, ...config } = req.body as LLMConfig & { username?: string };
   if (!config?.apiKey || !config?.modelId) {
     res.status(400).json({ error: "apiKey and modelId are required" });
@@ -125,20 +124,18 @@ app.post("/api/chat/start", (req, res) => {
   const sessionId = uuidv4();
   const resolvedUsername = username?.trim().toLowerCase() || "anonymous";
 
-  // 在 store 里创建持久化会话记录
   createSession(resolvedUsername, sessionId);
 
-  // SSE headers
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Session-Id", sessionId);
   res.flushHeaders();
 
-  const { agent, setRes } = createAnimationAgent(config, res);
+  const { session, setRes } = await createAnimationAgent(config, res);
 
   const memSession: Session = {
-    agent,
+    agent: session,
     setRes,
     username: resolvedUsername,
     messages: [],
