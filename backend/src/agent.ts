@@ -47,8 +47,8 @@ document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 
 ## Tools
 - **read_code()** — read current committed code before str_replace.
-- **commit_code(code, library, description)** — commit JavaScript code directly via the \`code\` parameter. Do NOT output a markdown code block separately; pass the full code as the \`code\` argument. \`library\` must be one of: \`gsap\`, \`anime\`, \`pixi\`, \`three\`, \`canvas\`.
-- **str_replace(old_str, new_str, description)** — targeted edit on committed code. \`old_str\` must be unique and exact.
+- **commit_code(code, library, description)** — commit JavaScript code directly via the \`code\` parameter. Do NOT output a markdown code block separately; pass the full code as the \`code\` argument. \`library\` must be one of: \`gsap\`, \`anime\`, \`pixi\`, \`three\`, \`canvas\`. **You MUST call validate_code immediately after every commit_code. No exceptions.**
+- **str_replace(old_str, new_str, description)** — targeted edit on committed code. \`old_str\` must be unique and exact. **You MUST call validate_code immediately after every str_replace. No exceptions.**
 - **validate_code()** — runs static + browser runtime checks on committed code. Returns \`ok\`, \`errors\`, \`warnings\`. **You MUST call this after every commit_code or str_replace. You MUST NOT finish until validate_code returns ok=true.**
 
 ## Workflow
@@ -169,7 +169,7 @@ export async function createAnimationAgent(
         mode: "full",
       });
       return {
-        content: [{ type: "text" as const, text: `Code committed (${currentCode.split("\n").length} lines): ${params.description}. Now call validate_code. If there are issues, fix with str_replace and validate again.` }],
+        content: [{ type: "text" as const, text: `Code committed (${currentCode.split("\n").length} lines): ${params.description}. YOU MUST NOW call validate_code() immediately. Do not output any text before calling validate_code.` }],
         details: { ...params, code: currentCode },
       };
     },
@@ -192,7 +192,7 @@ export async function createAnimationAgent(
       currentCode = currentCode.replace(params.old_str, params.new_str);
       sendSSE(res, { type: "code_update", code: currentCode, library: currentLibrary, mode: "patch" });
       return {
-        content: [{ type: "text" as const, text: `Applied edit: ${params.description}` }],
+        content: [{ type: "text" as const, text: `Applied edit: ${params.description}. YOU MUST NOW call validate_code() immediately.` }],
         details: { ...params, resultCode: currentCode },
       };
     },
