@@ -8,14 +8,15 @@ export interface EncodeOptions {
   fps: number;
   width: number;
   height: number;
+  signal?: AbortSignal;
 }
 
 export function encodeToMp4(options: EncodeOptions): Promise<string> {
-  const { framesDir, outputPath, fps, width, height } = options;
+  const { framesDir, outputPath, fps, width, height, signal } = options;
   const inputPattern = path.join(framesDir, "frame_%06d.png");
 
   return new Promise((resolve, reject) => {
-    ffmpeg()
+    const command = ffmpeg()
       .input(inputPattern)
       .inputOptions([`-framerate ${fps}`])
       .videoCodec("libx264")
@@ -28,8 +29,23 @@ export function encodeToMp4(options: EncodeOptions): Promise<string> {
       ])
       .output(outputPath)
       .on("end", () => resolve(outputPath))
-      .on("error", (err) => reject(err))
-      .run();
+      .on("error", (err) => reject(err));
+
+    command.run();
+
+    if (signal) {
+      const onAbort = () => {
+        try {
+          command.kill("SIGKILL");
+        } catch {}
+        reject(new Error("Render stopped"));
+      };
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
   });
 }
 

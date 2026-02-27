@@ -26,6 +26,3 @@ backend/outputs/
 # TypeScript
 *.tsbuildinfo
 
-# Agno agent (separate branch, keep out of main)
-agno-agent/
-backend/src/agno.ts

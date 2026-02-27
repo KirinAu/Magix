@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { RenderParams, RenderJob } from "@/lib/types";
-import { submitRender, watchRenderJob, getDownloadUrl } from "@/lib/api";
+import { submitRender, watchRenderJob, getDownloadUrl, stopRenderJob } from "@/lib/api";
 
 interface RenderPanelProps {
   code: string;
@@ -69,7 +69,14 @@ export default function RenderPanel({ code, library, params, onParamsChange, onR
     encoding: "编码 MP4...",
     done: "完成",
     error: "出错了",
+    stopped: "已停止",
   };
+
+  async function handleStopRender() {
+    if (!job?.jobId) return;
+    await stopRenderJob(job.jobId).catch(() => {});
+    setJob((prev) => (prev ? { ...prev, status: "stopped", error: "已手动停止" } : prev));
+  }
 
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -189,13 +196,22 @@ export default function RenderPanel({ code, library, params, onParamsChange, onR
       <div className="px-5 py-4 border-t border-gray-100 space-y-2">
         <button
           onClick={handleRender}
-          disabled={!code.trim() || isSubmitting || job?.status === "rendering" || job?.status === "encoding"}
+          disabled={!code.trim() || isSubmitting || job?.status === "rendering" || job?.status === "encoding" || job?.status === "pending"}
           className="w-full rounded-xl bg-gray-900 text-white py-3 text-sm font-medium disabled:opacity-40 hover:bg-gray-700 transition-colors"
         >
-          {isSubmitting || job?.status === "rendering" || job?.status === "encoding"
+          {isSubmitting || job?.status === "pending" || job?.status === "rendering" || job?.status === "encoding"
             ? "渲染中..."
             : "开始渲染"}
         </button>
+
+        {(job?.status === "pending" || job?.status === "rendering" || job?.status === "encoding") && (
+          <button
+            onClick={handleStopRender}
+            className="w-full rounded-xl border border-red-200 text-red-500 py-3 text-sm font-medium hover:bg-red-50 transition-colors"
+          >
+            停止渲染
+          </button>
+        )}
 
         {job?.status === "done" && job.jobId && (
           <a

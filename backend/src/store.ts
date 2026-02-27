@@ -216,7 +216,7 @@ export interface RenderJobRecord {
   jobId: string;
   sessionId: string;
   username: string;
-  status: "pending" | "rendering" | "encoding" | "done" | "error";
+  status: "pending" | "rendering" | "encoding" | "done" | "error" | "stopped";
   progress: number;
   total: number;
   outputFile?: string;

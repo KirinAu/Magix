@@ -155,6 +155,10 @@ export function getDownloadUrl(jobId: string): string {
   return `${BACKEND}/api/render/${jobId}/download`;
 }
 
+export async function stopRenderJob(jobId: string): Promise<void> {
+  await fetch(`${BACKEND}/api/render/${jobId}/stop`, { method: "POST" });
+}
+
 // 直接用静态路由访问已保存的视频文件（服务重启后仍有效）
 export function getVideoUrl(filename: string): string {
   return `${BACKEND}/outputs/${filename}`;

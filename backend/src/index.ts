@@ -116,6 +116,7 @@ app.delete("/api/users/:username/sessions/:sessionId", (req, res) => {
 // ─── Agent 会话管理 ───────────────────────────────────────────────────────────
 
 const sessions = new Map<string, Session>();
+const renderAbortControllers = new Map<string, AbortController>();
 
 /**
  * POST /api/chat/start
@@ -325,6 +326,8 @@ app.post("/api/render", async (req, res) => {
 
   const framesDir = path.join(OUTPUT_DIR, `frames_${jobId}`);
   const outputFile = path.join(OUTPUT_DIR, `${jobId}.mp4`);
+  const abortController = new AbortController();
+  renderAbortControllers.set(jobId, abortController);
 
   try {
     if (username && sessionId) updateRenderJob(jobId, { status: "rendering" });
@@ -336,6 +339,7 @@ app.post("/api/render", async (req, res) => {
       width,
       height,
       outputDir: framesDir,
+      signal: abortController.signal,
       onProgress: (frame, total) => {
         if (username && sessionId) updateRenderJob(jobId, { progress: frame, total });
       },
@@ -343,7 +347,7 @@ app.post("/api/render", async (req, res) => {
 
     if (username && sessionId) updateRenderJob(jobId, { status: "encoding" });
 
-    await encodeToMp4({ framesDir, outputPath: outputFile, fps, width, height });
+    await encodeToMp4({ framesDir, outputPath: outputFile, fps, width, height, signal: abortController.signal });
 
     cleanupFrames(framesDir);
 
@@ -352,9 +356,39 @@ app.post("/api/render", async (req, res) => {
       updateSession(username, sessionId, { videoPath: `${jobId}.mp4` });
     }
   } catch (err: any) {
-    if (username && sessionId) updateRenderJob(jobId, { status: "error", error: err.message });
+    const isStopped = abortController.signal.aborted || err?.message === "Render stopped";
+    if (username && sessionId) {
+      updateRenderJob(jobId, {
+        status: isStopped ? "stopped" : "error",
+        error: isStopped ? "已手动停止" : err.message,
+      });
+    }
     cleanupFrames(framesDir);
+  } finally {
+    renderAbortControllers.delete(jobId);
   }
+});
+
+/**
+ * POST /api/render/:jobId/stop
+ */
+app.post("/api/render/:jobId/stop", (req, res) => {
+  const { jobId } = req.params;
+  const controller = renderAbortControllers.get(jobId);
+  const job = getRenderJob(jobId);
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  if (job.status === "done" || job.status === "error" || job.status === "stopped") {
+    res.json({ ok: true, alreadyFinished: true });
+    return;
+  }
+  if (controller && !controller.signal.aborted) {
+    controller.abort();
+  }
+  updateRenderJob(jobId, { status: "stopped", error: "已手动停止" });
+  res.json({ ok: true });
 });
 
 /**
@@ -384,7 +418,7 @@ app.get("/api/render/:jobId", (req, res) => {
       error: current.error,
     });
 
-    if (current.status === "done" || current.status === "error") {
+    if (current.status === "done" || current.status === "error" || current.status === "stopped") {
       clearInterval(interval);
       res.end();
     }

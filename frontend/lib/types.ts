@@ -87,7 +87,7 @@ export interface LogEntry {
 export interface RenderJob {
   jobId: string;
   sessionId?: string;
-  status: "pending" | "rendering" | "encoding" | "done" | "error";
+  status: "pending" | "rendering" | "encoding" | "done" | "error" | "stopped";
   progress: number;
   total: number;
   outputFile?: string;

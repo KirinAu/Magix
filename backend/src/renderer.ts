@@ -12,6 +12,7 @@ export interface RenderOptions extends SandboxOptions {
   duration: number; // 秒
   outputDir: string;
   onProgress?: (frame: number, total: number) => void;
+  signal?: AbortSignal;
 }
 
 let browserInstance: Browser | null = null;
@@ -37,7 +38,7 @@ export async function renderFrames(
   userCode: string,
   options: RenderOptions
 ): Promise<string[]> {
-  const { fps, duration, outputDir, width, height, onProgress } = options;
+  const { fps, duration, outputDir, width, height, onProgress, signal } = options;
   const totalFrames = Math.ceil(fps * duration);
 
   fs.mkdirSync(outputDir, { recursive: true });
@@ -55,6 +56,7 @@ export async function renderFrames(
     const framePaths: string[] = [];
 
     for (let i = 0; i < totalFrames; i++) {
+      if (signal?.aborted) throw new Error("Render stopped");
       const t = i / fps;
 
       // seek 到当前帧时间
@@ -71,6 +73,7 @@ export async function renderFrames(
       let attempts = 0;
       while (true) {
         try {
+          if (signal?.aborted) throw new Error("Render stopped");
           await page.screenshot({ path: framePath as `${string}.png`, type: "png" });
           break;
         } catch (err: any) {
