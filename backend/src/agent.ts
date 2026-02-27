@@ -47,7 +47,7 @@ document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 
 ## Tools
 - **read_code()** — read current committed code before str_replace.
-- **commit_code(code, library, description)** — commit JavaScript code directly via the \`code\` parameter. Do NOT output a markdown code block separately; pass the full code as the \`code\` argument.
+- **commit_code(code, library, description)** — commit JavaScript code directly via the \`code\` parameter. Do NOT output a markdown code block separately; pass the full code as the \`code\` argument. \`library\` must be one of: \`gsap\`, \`anime\`, \`pixi\`, \`three\`, \`canvas\`.
 - **str_replace(old_str, new_str, description)** — targeted edit on committed code. \`old_str\` must be unique and exact.
 - **validate_code()** — runs static + browser runtime checks on committed code. Returns \`ok\`, \`errors\`, \`warnings\`. **You MUST call this after every commit_code or str_replace. You MUST NOT finish until validate_code returns ok=true.**
 
@@ -150,7 +150,7 @@ export async function createAnimationAgent(
     parameters: Type.Object({
       code: Type.String({ description: "The complete JavaScript animation code to commit" }),
       library: Type.Union(
-        [Type.Literal("gsap"), Type.Literal("anime"), Type.Literal("pixi"), Type.Literal("three")],
+        [Type.Literal("gsap"), Type.Literal("anime"), Type.Literal("pixi"), Type.Literal("three"), Type.Literal("canvas")],
         { description: "Which animation library this code uses" }
       ),
       description: Type.String({ description: "Brief description of this committed code" }),
