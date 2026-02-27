@@ -68,6 +68,12 @@ export interface SavedModel {
   config: LLMConfig;
 }
 
+export interface SavedProvider {
+  provider: string;   // "anthropic" | "google" | "openai" | "custom"
+  apiKey: string;
+  baseUrl?: string;
+}
+
 export type LogEntryKind = "info" | "thinking" | "tool" | "error" | "request";
 
 export interface LogEntry {

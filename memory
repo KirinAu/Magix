@@ -1,0 +1,269 @@
+// ═══════════════════════════════════════════
+// USER REQUEST: 4-shot cinematic sequence of a futuristic neural interface core. 
+// 1. Extreme macro rim light. 2. Light sweep over metallic surface. 
+// 3. 3D fluid particle dispersal. 4. Minimalist snap back and overhead spotlight.
+//
+// DESIGN ANALYSIS: This requires a highly polished, "Apple keynote" motion graphics approach.
+// We need photorealistic physically-based materials (PBR) for the hardware, and a high-performance 
+// WebGL particle system for the fluid dispersal. The transitions must be seamless.
+//
+// CREATIVE BRIEF:
+//   - Visual concept: A sleek, obsidian/titanium smart-ring that dissolves into pure digital stardust.
+//   - Library choice: Three.js for 3D PBR rendering and WebGL particles + GSAP for precise timeline orchestration.
+//   - Composition: Pitch black void, highlighting the pure geometry and light.
+//   - Color language: Obsidian black, neon cyan (#00e5ff), deep purple (#7000ff).
+//   - Motion language: Staggered, purposeful. Slow-mo sweeps contrasting with an explosive, turbulent particle field, ending with an aggressive snap-back.
+//   - Signature detail: A custom vertex shader implementing an FBM fluid turbulence algorithm to make the particles move like weightless glowing fluid.
+// ═══════════════════════════════════════════
+
+// --- 1. CLEANUP ---
+if (window.__threeRenderer) {
+    window.__threeRenderer.dispose();
+    window.__threeRenderer.forceContextLoss();
+    const oldCanvas = document.querySelector('canvas');
+    if (oldCanvas) oldCanvas.remove();
+}
+gsap.killTweensOf("*");
+gsap.globalTimeline.clear();
+if (window.__renderFunc) gsap.ticker.remove(window.__renderFunc);
+
+// --- 2. SETUP ---
+const width = window.CANVAS_WIDTH;
+const height = window.CANVAS_HEIGHT;
+const SCALE = window.SCALE || 1;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(width, height);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+window.__threeRenderer = renderer;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+
+const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+const camProps = { x: 0, y: 0, z: 10, tx: 0, ty: 0, tz: 0 };
+
+// --- 3. ENVIRONMENT & LIGHTING ---
+// Procedural Environment Map for photorealistic metallic reflections
+const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256);
+const cubeCamera = new THREE.CubeCamera(0.1, 100, cubeRenderTarget);
+const envScene = new THREE.Scene();
+envScene.background = new THREE.Color(0x000000);
+const envL1 = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshBasicMaterial({color: 0xffffff}));
+envL1.position.set(0, 10, 0); envL1.rotation.x = Math.PI/2; envScene.add(envL1);
+const envL2 = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshBasicMaterial({color: 0x00e5ff}));
+envL2.position.set(-10, 0, 0); envL2.rotation.y = Math.PI/2; envScene.add(envL2);
+const envL3 = new THREE.Mesh(new THREE.PlaneGeometry(10, 10), new THREE.MeshBasicMaterial({color: 0x7000ff}));
+envL3.position.set(10, 0, 0); envL3.rotation.y = -Math.PI/2; envScene.add(envL3);
+cubeCamera.update(renderer, envScene);
+
+// Dynamic Lights
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.02);
+scene.add(ambientLight);
+
+// Shot 1: Macro Rim Light
+const rimLight = new THREE.PointLight(0x00ffff, 0, 10);
+scene.add(rimLight);
+
+// Shot 2: Light Sweep
+const sweepLight = new THREE.SpotLight(0xffffff, 0, 30, Math.PI/8, 0.5, 1);
+scene.add(sweepLight);
+scene.add(sweepLight.target);
+
+// Shot 4: Overhead Presentation Light
+const overheadLight = new THREE.SpotLight(0xffffff, 0, 20, Math.PI/5, 0.8, 1);
+scene.add(overheadLight);
+scene.add(overheadLight.target);
+
+// --- 4. GEOMETRY & MATERIALS ---
+// The sleek, aerodynamic device (Flattened Torus)
+const radius = 3;
+const tube = 0.8;
+const radialSegments = 256;
+const tubularSegments = 256;
+const baseGeometry = new THREE.TorusGeometry(radius, tube, radialSegments, tubularSegments);
+baseGeometry.scale(1, 1, 0.3); // Flatten to a sleek ring profile
+
+const solidMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x020202, // Obsidian black
+    metalness: 0.9,
+    roughness: 0.15, // Smooth titanium finish
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.1,
+    envMap: cubeRenderTarget.texture,
+    envMapIntensity: 0.0 // Managed by timeline
+});
+const solidMesh = new THREE.Mesh(baseGeometry, solidMaterial);
+scene.add(solidMesh);
+
+// --- 5. PARTICLE SYSTEM ---
+const particleCount = baseGeometry.attributes.position.count;
+const particleGeometry = new THREE.BufferGeometry();
+particleGeometry.setAttribute('position', baseGeometry.attributes.position);
+
+// Random attributes for organic explosion
+const randoms = new Float32Array(particleCount * 3);
+for(let i = 0; i < particleCount * 3; i += 3) {
+    randoms[i] = Math.random();     // Outward force
+    randoms[i+1] = Math.random();   // Explosion delay stagger
+    randoms[i+2] = Math.random();   // Z-axis expansion
+}
+particleGeometry.setAttribute('aRandom', new THREE.BufferAttribute(randoms, 3));
+
+const particleMat = new THREE.ShaderMaterial({
+    uniforms: {
+        uTime: { value: 0 },
+        uProgress: { value: 0 },
+        uColor1: { value: new THREE.Color(0x00e5ff) }, // Cyan
+        uColor2: { value: new THREE.Color(0x7000ff) }, // Purple
+        uSize: { value: 5.0 * SCALE }
+    },
+    vertexShader: `
+        uniform float uTime;
+        uniform float uProgress;
+        uniform float uSize;
+        attribute vec3 aRandom;
+        varying vec3 vPosition;
+        varying float vAlpha;
+
+        // Simple fluid pseudo-noise for performance & beauty
+        vec3 simpleFluid(vec3 p, float t) {
+            float x = sin(p.y*2.1 + t) * cos(p.z*2.3 + t);
+            float y = sin(p.z*2.1 + t) * cos(p.x*2.3 + t);
+            float z = sin(p.x*2.1 + t) * cos(p.y*2.3 + t);
+            return vec3(x, y, z);
+        }
+
+        vec3 fbmFluid(vec3 p, float t) {
+            vec3 v = simpleFluid(p, t);
+            v += simpleFluid(p * 2.0, t * 1.5) * 0.5;
+            return v;
+        }
+
+        void main() {
+            vec3 pos = position;
+            
+            // 1. Outward burst
+            vec3 outward = normalize(pos) * (aRandom.x * 6.0 + 1.0);
+            outward.z += (aRandom.z - 0.5) * 6.0; // Break the 2D plane
+            
+            // 2. Swirling fluid mechanics
+            vec3 fluid = fbmFluid(pos * 1.2, uTime * 1.5) * 4.0;
+            
+            vec3 targetPos = pos + outward + fluid;
+            
+            // 3. Staggered particle motion
+            float delay = aRandom.y * 0.6; 
+            float localProgress = smoothstep(delay, delay + 0.4, uProgress);
+            
+            pos = mix(pos, targetPos, localProgress);
+            
+            vPosition = pos;
+            vAlpha = smoothstep(0.0, 0.1, localProgress); // Invisible until it explodes
+            
+            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+            gl_PointSize = uSize * (15.0 / -mvPosition.z);
+            gl_Position = projectionMatrix * mvPosition;
+        }
+    `,
+    fragmentShader: `
+        uniform vec3 uColor1;
+        uniform vec3 uColor2;
+        varying vec3 vPosition;
+        varying float vAlpha;
+
+        void main() {
+            float dist = length(gl_PointCoord - vec2(0.5));
+            if (dist > 0.5) discard;
+            
+            // Broader and brighter luminous core
+            float core = pow(1.0 - (dist * 2.0), 1.2);
+            
+            // Mix neon colors based on spatial position
+            vec3 color = mix(uColor1, uColor2, sin(vPosition.y * 2.0 + vPosition.x) * 0.5 + 0.5);
+            
+            // Boost RGB values exponentially for extreme brightness with additive blending
+            color *= 3.0;
+            
+            gl_FragColor = vec4(color, core * vAlpha);
+        }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+});
+
+const particles = new THREE.Points(particleGeometry, particleMat);
+scene.add(particles);
+
+// --- 6. ANIMATION TIMELINE ---
+const tl = gsap.timeline({ repeat: -1 });
+
+// Initialize States
+tl.set(camProps, { x: 4.0, y: -0.2, z: 1.0, tx: 3.8, ty: 0.0, tz: 0.0 });
+tl.set(rimLight, { intensity: 0 });
+tl.set(rimLight.position, { x: 4.2, y: -2, z: 0.5 });
+tl.set(sweepLight, { intensity: 0 });
+tl.set(overheadLight, { intensity: 0 });
+tl.set(solidMaterial, { envMapIntensity: 0 });
+tl.set(solidMesh, { visible: true });
+tl.set(solidMesh.rotation, { x: 0, y: 0, z: 0 });
+tl.set(particles, { visible: false });
+tl.set(particleMat.uniforms.uProgress, { value: 0 });
+
+// 🎬 SHOT 1: Extreme Macro Close-up (0.0s - 2.5s)
+// A single cyan pulse glides along the edge.
+tl.to(rimLight, { intensity: 5, duration: 1, ease: "power2.inOut" }, 0);
+tl.to(rimLight.position, { y: 2.0, duration: 2.5, ease: "power1.inOut" }, 0);
+tl.to(rimLight, { intensity: 0, duration: 1, ease: "power2.inOut" }, 1.5);
+
+// 🎬 SHOT 2: Light Sweep & Form Reveal (2.5s - 5.5s)
+// Camera pulls back, studio lights hit the titanium surface.
+tl.to(camProps, { x: 0, y: 0, z: 10, tx: 0, ty: 0, tz: 0, duration: 3, ease: "power3.inOut" }, 2.5);
+tl.to(solidMaterial, { envMapIntensity: 1.5, duration: 1.5, ease: "power2.inOut" }, 2.5);
+tl.to(sweepLight, { intensity: 25, duration: 1 }, 2.5);
+tl.fromTo(sweepLight.position, 
+    { x: -8, y: 5, z: 8 }, 
+    { x: 8, y: 5, z: 8, duration: 3, ease: "power2.inOut" }, 2.5);
+tl.to(sweepLight, { intensity: 0, duration: 1 }, 4.5);
+
+// 🎬 SHOT 3: The Transformation / Explosion (5.5s - 10.5s)
+// Device disperses into 3D fluid particles.
+tl.set(solidMesh, { visible: false }, 5.5);
+tl.set(particles, { visible: true }, 5.5);
+tl.to(particleMat.uniforms.uProgress, { value: 1.0, duration: 4.0, ease: "power2.out" }, 5.5);
+tl.to(particles.rotation, { x: Math.PI / 6, y: -Math.PI / 4, duration: 5.0, ease: "power1.inOut" }, 5.5);
+
+// 🎬 SHOT 4a: The Implosion / Snap Back (10.5s - 11.3s)
+// Dramatic snap back to reality.
+tl.to(particleMat.uniforms.uProgress, { value: 0, duration: 0.8, ease: "power4.in" }, 10.5);
+tl.to(particles.rotation, { x: 0, y: 0, duration: 0.8, ease: "power4.in" }, 10.5);
+
+// 🎬 SHOT 4b: Minimalist Presentation (11.3s - 14.0s)
+// Pure silence, solid mesh, spotlight overhead.
+tl.set(solidMesh, { visible: true }, 11.3);
+tl.set(particles, { visible: false }, 11.3);
+tl.to(solidMaterial, { envMapIntensity: 0.4, duration: 0.5 }, 11.3); // Dim env, spotlight dominates
+tl.fromTo(overheadLight, { intensity: 0 }, { intensity: 35, duration: 1, ease: "power2.out" }, 11.3);
+tl.fromTo(solidMesh.rotation, 
+    { x: Math.PI / 8, y: -Math.PI / 4 }, 
+    { x: 0, y: 0, duration: 2, ease: "power3.out" }, 11.3);
+
+// Fade to black to prepare for seamless loop (14.0s - 15.0s)
+tl.to(overheadLight, { intensity: 0, duration: 1, ease: "power2.inOut" }, 14.0);
+tl.to(solidMaterial, { envMapIntensity: 0, duration: 1, ease: "power2.inOut" }, 14.0);
+
+// --- 7. RENDER LOOP ---
+window.__renderFunc = () => {
+    particleMat.uniforms.uTime.value += 0.01; // Evolve fluid turbulence
+    
+    // Update camera smoothly driven by GSAP
+    camera.position.set(camProps.x, camProps.y, camProps.z);
+    camera.lookAt(camProps.tx, camProps.ty, camProps.tz);
+    
+    renderer.render(scene, camera);
+};
+gsap.ticker.add(window.__renderFunc);

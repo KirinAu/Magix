@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { LLMConfig, SavedModel } from "@/lib/types";
+import type { LLMConfig, SavedModel, SavedProvider } from "@/lib/types";
 
 interface SettingsModalProps {
   config: LLMConfig | null;
@@ -28,8 +28,31 @@ function persistSavedModels(models: SavedModel[]) {
   localStorage.setItem("me_saved_models", JSON.stringify(models));
 }
 
+function loadSavedProviders(): SavedProvider[] {
+  try {
+    return JSON.parse(localStorage.getItem("me_saved_providers") ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedProviders(providers: SavedProvider[]) {
+  localStorage.setItem("me_saved_providers", JSON.stringify(providers));
+}
+
+function upsertProvider(providers: SavedProvider[], entry: SavedProvider): SavedProvider[] {
+  const idx = providers.findIndex((p) => p.provider === entry.provider);
+  if (idx >= 0) {
+    const next = [...providers];
+    next[idx] = entry;
+    return next;
+  }
+  return [...providers, entry];
+}
+
 export default function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
   const [savedModels, setSavedModels] = useState<SavedModel[]>(loadSavedModels);
+  const [savedProviders, setSavedProviders] = useState<SavedProvider[]>(loadSavedProviders);
   const [provider, setProvider] = useState(config?.provider ?? "anthropic");
   const [modelId, setModelId] = useState(config?.modelId ?? "");
   const [apiKey, setApiKey] = useState(config?.apiKey ?? "");
@@ -40,6 +63,14 @@ export default function SettingsModal({ config, onSave, onClose }: SettingsModal
   function handleProviderChange(p: string) {
     setProvider(p);
     if (p !== "custom") setBaseUrl(PROVIDER_PRESETS[p]?.baseUrl ?? "");
+    // 自动填入已保存的 API Key
+    const saved = savedProviders.find((sp) => sp.provider === p);
+    if (saved) {
+      setApiKey(saved.apiKey);
+      if (saved.baseUrl) setBaseUrl(saved.baseUrl);
+    } else {
+      setApiKey("");
+    }
   }
 
   function handleUse(m: SavedModel) {
@@ -62,7 +93,15 @@ export default function SettingsModal({ config, onSave, onClose }: SettingsModal
       baseUrl: baseUrl.trim() || undefined,
       stripThinking,
     };
-    // 保存到列表
+    // 保存 provider key
+    const updatedProviders = upsertProvider(savedProviders, {
+      provider,
+      apiKey: apiKey.trim(),
+      baseUrl: baseUrl.trim() || undefined,
+    });
+    setSavedProviders(updatedProviders);
+    persistSavedProviders(updatedProviders);
+    // 保存到模型列表
     if (name.trim()) {
       const existing = savedModels.find(
         (m) => m.config.provider === cfg.provider && m.config.modelId === cfg.modelId
@@ -89,6 +128,45 @@ export default function SettingsModal({ config, onSave, onClose }: SettingsModal
           <h2 className="text-lg font-semibold text-gray-900">LLM 配置</h2>
           <p className="text-sm text-gray-400 mt-1">配置 AI 模型连接</p>
         </div>
+
+        {/* Provider Keys */}
+        {savedProviders.length > 0 && (
+          <div className="mb-4">
+            <label className="text-xs font-medium text-gray-500 block mb-2">已保存 Provider Keys</label>
+            <div className="space-y-1.5">
+              {savedProviders.map((sp) => (
+                <div key={sp.provider} className="flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2">
+                  <div className="min-w-0">
+                    <span className="text-xs font-medium text-gray-700 capitalize">{sp.provider}</span>
+                    <span className="text-xs text-gray-400 ml-2">{sp.apiKey.slice(0, 8)}···</span>
+                  </div>
+                  <div className="flex gap-2 ml-3 shrink-0">
+                    <button
+                      onClick={() => {
+                        setProvider(sp.provider);
+                        setApiKey(sp.apiKey);
+                        setBaseUrl(sp.baseUrl ?? PROVIDER_PRESETS[sp.provider]?.baseUrl ?? "");
+                      }}
+                      className="text-xs text-gray-900 font-medium hover:underline"
+                    >
+                      填入
+                    </button>
+                    <button
+                      onClick={() => {
+                        const updated = savedProviders.filter((p) => p.provider !== sp.provider);
+                        setSavedProviders(updated);
+                        persistSavedProviders(updated);
+                      }}
+                      className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 已保存模型列表 */}
         {savedModels.length > 0 && (
