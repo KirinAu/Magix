@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import ReactMarkdown from "react-markdown";
+import { useState, useRef, useEffect } from "react";import ReactMarkdown from "react-markdown";
 import type { ChatMessage, LLMConfig, LogEntry } from "@/lib/types";
 import { startSession, sendMessage, abortSession } from "@/lib/api";
 
@@ -29,6 +28,9 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
   const isComposingRef = useRef(false);
   const thinkingLogIdRef = useRef<string | null>(null);
   const thinkingTextRef = useRef<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [pendingImages, setPendingImages] = useState<Array<{ type: "base64"; mediaType: string; data: string; preview: string }>>([]);
 
   function mkId() { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 
@@ -239,18 +241,36 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
     if (!input.trim() || isStreaming || !llmConfig) return;
 
     const text = input.trim();
+    const imgs = pendingImages.map(({ type, mediaType, data }) => ({ type, mediaType, data }));
     setMessages((prev) => [
       ...prev,
       { id: Date.now().toString(), role: "user", content: text, timestamp: Date.now() },
     ]);
     setInput("");
+    setPendingImages([]);
     setIsStreaming(true);
     onLog({ id: mkId(), kind: "request", label: `sendMessage: "${text}"`, detail: JSON.stringify(llmConfig, null, 2), timestamp: Date.now() });
 
     await ensureSession();
     if (!sessionIdRef.current) return;
 
-    await sendMessage(sessionIdRef.current, text, handleEvent);
+    await sendMessage(sessionIdRef.current, text, handleEvent, imgs.length > 0 ? imgs : undefined);
+  }
+
+  async function handleImageFiles(files: FileList | null) {
+    if (!files) return;
+    const results: Array<{ type: "base64"; mediaType: string; data: string; preview: string }> = [];
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("image/")) continue;
+      const data = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve((e.target?.result as string).split(",")[1]);
+        reader.readAsDataURL(file);
+      });
+      const preview = URL.createObjectURL(file);
+      results.push({ type: "base64", mediaType: file.type, data, preview });
+    }
+    setPendingImages((prev) => [...prev, ...results]);
   }
 
   return (
@@ -329,8 +349,43 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="px-4 py-3 border-t border-gray-100">
+      <div className="px-4 py-3 border-t border-gray-100 space-y-2">
+        {/* 图片预览 */}
+        {pendingImages.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {pendingImages.map((img, i) => (
+              <div key={i} className="relative">
+                <img src={img.preview} className="w-14 h-14 rounded-xl object-cover border border-gray-200" />
+                <button
+                  onClick={() => setPendingImages((prev) => prev.filter((_, j) => j !== i))}
+                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-gray-900 text-white text-xs flex items-center justify-center leading-none"
+                >×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex gap-2 items-end">
+          {/* 图片上传按钮 */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => handleImageFiles(e.target.files)}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isStreaming}
+            className="shrink-0 rounded-xl border border-gray-200 text-gray-400 px-3 py-2.5 text-sm hover:bg-gray-50 disabled:opacity-40 transition-colors"
+            title="上传参考图"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </button>
+
           <input
             className="flex-1 rounded-xl bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-200"
             placeholder={llmConfig ? "描述动画效果..." : "请先配置 LLM"}

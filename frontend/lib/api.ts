@@ -75,12 +75,13 @@ export async function startSession(
 export async function sendMessage(
   sessionId: string,
   message: string,
-  onEvent: (event: any) => void
+  onEvent: (event: any) => void,
+  images?: Array<{ type: "base64"; mediaType: string; data: string }>
 ): Promise<() => void> {
   const res = await fetch(`${BACKEND}/api/chat/${sessionId}/message`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, images }),
   });
 
   const reader = res.body!.getReader();

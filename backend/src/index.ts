@@ -160,7 +160,7 @@ app.post("/api/chat/start", async (req, res) => {
  */
 app.post("/api/chat/:sessionId/message", async (req, res) => {
   const { sessionId } = req.params;
-  const { message } = req.body;
+  const { message, images } = req.body;  // images: Array<{ type: "base64", mediaType: string, data: string }>
 
   if (!message) {
     res.status(400).json({ error: "message is required" });
@@ -246,7 +246,7 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
   };
 
   try {
-    await session.agent.prompt(message);
+    await session.agent.prompt(message, { images: images ?? [] });
   } catch (err: any) {
     sendSSE(origRes, { type: "error", message: err.message });
     origRes.end();
