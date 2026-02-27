@@ -4,9 +4,7 @@ import path from "path";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { createAnimationAgent, sendSSE, type LLMConfig } from "./agent";
-import { createAgnoSession } from "./agno";
 
-const USE_AGNO = process.env.USE_AGNO === "true";
 import { renderFrames } from "./renderer";
 import { encodeToMp4, cleanupFrames } from "./encoder";
 import {
@@ -152,19 +150,9 @@ app.post("/api/chat/start", async (req, res) => {
   };
   sessions.set(sessionId, memSession);
 
-  if (USE_AGNO) {
-    const agnoSession = createAgnoSession(config, res, () => ({
-      messages: memSession.messages,
-      currentCode: memSession.currentCode,
-      currentLibrary: memSession.currentLibrary,
-    }));
-    memSession.agent = agnoSession;
-    memSession.setRes = (r) => agnoSession.setRes(r);
-  } else {
-    const { session, setRes } = await createAnimationAgent(config, res);
-    memSession.agent = session;
-    memSession.setRes = setRes;
-  }
+  const { session, setRes } = await createAnimationAgent(config, res);
+  memSession.agent = session;
+  memSession.setRes = setRes;
 
   sendSSE(res, { type: "session_ready", sessionId });
   res.end();

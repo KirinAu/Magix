@@ -12,8 +12,6 @@ services:
       GITEA_TOKEN: ${GITEA_TOKEN:-}
       GITEA_WEBHOOK_SECRET: ${GITEA_WEBHOOK_SECRET:-}
       DATA_DIR: /data
-      USE_AGNO: ${USE_AGNO:-false}
-      AGNO_URL: ${AGNO_URL:-http://agno-agent:8100}
     volumes:
       - /mnt/HDD/projects/MagicEffect/data:/data
     extra_hosts:
@@ -23,8 +21,6 @@ services:
     depends_on:
       redis:
         condition: service_started
-      agno-agent:
-        condition: service_healthy
 
   frontend:
     image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-magiceffect}/magiceffect-frontend:${FRONTEND_IMAGE_TAG:-latest}
@@ -38,21 +34,6 @@ services:
       - "${FRONTEND_HOST_PORT:-18083}:3000"
     depends_on:
       - backend
-
-  agno-agent:
-    image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-magiceffect}/magiceffect-agno-agent:${AGNO_IMAGE_TAG:-latest}
-    container_name: magiceffect-agno-agent
-    restart: unless-stopped
-    environment:
-      AGNO_TELEMETRY: "false"
-    ports:
-      - "${AGNO_HOST_PORT:-18100}:8100"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
 
   worker:
     image: ${REGISTRY:-localhost:5000}/${IMAGE_NAMESPACE:-magiceffect}/magiceffect-backend:${WORKER_IMAGE_TAG:-latest}
