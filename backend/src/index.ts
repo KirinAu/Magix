@@ -212,7 +212,7 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
           const ae = evt.assistantMessageEvent;
           if (ae?.type === "text_delta") assistantBuffer += ae.delta;
           if (ae?.type === "toolcall_end") {
-            const label = ae.toolName === "write_code" ? "生成代码"
+            const label = ae.toolName === "commit_code" ? "生成代码"
               : ae.toolName === "str_replace" ? "修改代码"
               : ae.toolName === "read_code" ? "查看代码" : ae.toolName;
             session.messages.push({ role: "tool", content: label, toolName: ae.toolName, timestamp: Date.now() });

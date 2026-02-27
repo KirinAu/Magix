@@ -169,17 +169,15 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
             } else if (lastToolCall.name === "read_code") {
               setToolStatus("正在查看代码...");
             } else if (lastToolCall.name === "validate_code") {
-              setToolStatus("正在检查代码...");
-            } else if (lastToolCall.name === "begin_coding") {
-              setToolStatus("开始写代码...");
-            }
+                      setToolStatus("正在检查代码...");
+                    }
           }
         }
       }
 
       if (ae.type === "toolcall_end") {
         const name = currentToolNameRef.current;
-        const label = name === "commit_code" ? "提交代码" : name === "str_replace" ? "修改代码" : name === "read_code" ? "查看代码" : name === "begin_coding" ? "开始写代码" : "检查代码";
+        const label = name === "commit_code" ? "提交代码" : name === "str_replace" ? "修改代码" : name === "read_code" ? "查看代码" : "检查代码";
         setMessages((prev) => [
           ...prev,
           { id: Date.now().toString(), role: "tool", content: label, toolName: name, timestamp: Date.now() },
