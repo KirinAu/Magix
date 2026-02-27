@@ -66,10 +66,10 @@ Output a short analysis in plain text:
 Call \`commit_code(code, library, description)\` with the complete JavaScript code in the \`code\` parameter.
 
 ### Step 3 — Validate
-Call \`validate_code()\`. If it returns errors, go to Step 4. If warnings only, fix then validate again.
+Call \`validate_code()\`. If it returns errors, go to Step 4. If warnings only, call \`read_code()\` first, then fix with \`str_replace\`, then validate again.
 
 ### Step 4 — Fix
-Fix every issue with \`str_replace\`, then call \`validate_code()\` again. Repeat until \`ok=true\`. Max 5 fix rounds.
+Call \`read_code()\` to get the exact current code, then fix every issue with \`str_replace\`, then call \`validate_code()\` again. Repeat until \`ok=true\` and no warnings. Max 5 fix rounds.
 
 ### Step 5 — Summarize
 Only after \`validate_code\` returns \`ok=true\`: short reply with what was built + recommended loop duration.
@@ -93,6 +93,8 @@ function buildModel(config: LLMConfig): Model<any> {
       ? "google-generative-ai"
       : "openai-completions";
 
+  const isThinkingModel = /claude-3[-.]?[57]|claude-sonnet-4|gemini-2\.5|o[134]|deepseek-r|qwq/i.test(config.modelId);
+
   return {
     id: config.modelId,
     name: config.modelId,
@@ -103,7 +105,7 @@ function buildModel(config: LLMConfig): Model<any> {
       : isGoogle
         ? "https://generativelanguage.googleapis.com/v1beta"
         : "https://api.openai.com"),
-    reasoning: false,
+    reasoning: isThinkingModel,
     input: ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
@@ -117,18 +119,7 @@ export async function createAnimationAgent(
 ): Promise<{ session: any; setRes: (r: Response) => void }> {
   let currentCode = "";
   let currentLibrary = "gsap";
-  let assistantDraftText = "";
   let res = initialRes;
-
-  function extractLatestJsCodeBlock(text: string): string | null {
-    const re = /```(?:javascript|js)?\n([\s\S]*?)```/gi;
-    let match: RegExpExecArray | null = null;
-    let last: string | null = null;
-    while ((match = re.exec(text)) !== null) {
-      last = match[1];
-    }
-    return last ? last.trim() : null;
-  }
 
   const readCodeTool: ToolDefinition<any> = {
     name: "read_code",
@@ -201,7 +192,7 @@ export async function createAnimationAgent(
   const validateCodeTool: ToolDefinition<any> = {
     name: "validate_code",
     label: "Validate Code",
-    description: "Runs static checks and browser runtime checks on the current animation code. Returns ok=true only when there are no errors.",
+    description: "Runs static checks and browser runtime checks on the current animation code. Returns ok=true when there are no errors. Warnings may still exist even when ok=true — fix all warnings before summarizing.",
     parameters: Type.Object({}),
     execute: async () => {
       if (!currentCode) {
@@ -215,7 +206,8 @@ export async function createAnimationAgent(
       lines.push(`ok: ${result.ok}`);
       if (result.errors.length) lines.push(`errors:\n${result.errors.map((e: string) => `  - ${e}`).join("\n")}`);
       if (result.warnings.length) lines.push(`warnings:\n${result.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
-      if (result.ok) lines.push("All checks passed. You may now summarize.");
+      if (result.ok && result.warnings.length === 0) lines.push("All checks passed. You may now summarize.");
+      if (result.ok && result.warnings.length > 0) lines.push("ok=true but warnings exist. Fix the warnings with str_replace, then call validate_code again.");
       return {
         content: [{ type: "text" as const, text: lines.join("\n") }],
         details: result,
@@ -244,15 +236,6 @@ export async function createAnimationAgent(
   });
 
   session.subscribe((event: AgentSessionEvent) => {
-    if (event.type === "agent_start" || event.type === "turn_start") {
-      assistantDraftText = "";
-    }
-    if (event.type === "message_update") {
-      const ae = (event as any).assistantMessageEvent;
-      if (ae?.type === "text_delta") {
-        assistantDraftText += ae.delta ?? "";
-      }
-    }
     if (event.type === "agent_end") {
       const lastMsg = (event as any).messages?.[(event as any).messages.length - 1] as any;
       if (lastMsg?.stopReason === "error") {
