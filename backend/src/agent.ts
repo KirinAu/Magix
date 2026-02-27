@@ -222,20 +222,24 @@ export async function createAnimationAgent(
   };
 
   const model = buildModel(config);
-  const { createAgentSession, SessionManager, AuthStorage } = await loadCodingAgent();
+  const { createAgentSession, SessionManager, AuthStorage, DefaultResourceLoader } = await loadCodingAgent();
   const authStorage = AuthStorage.create();
   authStorage.set(config.provider, { type: "api_key", key: config.apiKey });
 
+  const resourceLoader = new DefaultResourceLoader({
+    cwd: process.cwd(),
+    systemPromptOverride: () => SYSTEM_PROMPT,
+  });
+  await resourceLoader.reload();
+
   const { session } = await createAgentSession({
     model,
-    tools: [],  // 不用内置工具
+    tools: [],
     customTools: [readCodeTool, commitCodeTool, strReplaceTool, validateCodeTool],
     sessionManager: SessionManager.inMemory(),
     authStorage,
+    resourceLoader,
   });
-
-  // 覆盖 system prompt
-  (session as any).agent.state.systemPrompt = SYSTEM_PROMPT;
 
   session.subscribe((event: AgentSessionEvent) => {
     if (event.type === "agent_start") {
