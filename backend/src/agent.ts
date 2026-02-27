@@ -47,7 +47,7 @@ document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 
 ## Tools
 - **read_code()** — read current committed code before str_replace.
-- **commit_code(library, description)** — commit the latest JavaScript code block you just wrote in assistant text.
+- **commit_code(code, library, description)** — commit JavaScript code directly via the \`code\` parameter. Do NOT output a markdown code block separately; pass the full code as the \`code\` argument.
 - **str_replace(old_str, new_str, description)** — targeted edit on committed code. \`old_str\` must be unique and exact.
 - **validate_code()** — runs static + browser runtime checks on committed code. Returns \`ok\`, \`errors\`, \`warnings\`. **You MUST call this after every commit_code or str_replace. You MUST NOT finish until validate_code returns ok=true.**
 
@@ -62,8 +62,8 @@ Output a short analysis in plain text:
 - **Color**: Palette (max 3 colors).
 - **Motion**: Key motion beats — what moves, when, how fast?
 
-### Step 2 — Draft Code + Commit (one message)
-Output a single JavaScript markdown code block, then immediately call \`commit_code(library, description)\` in the same message.
+### Step 2 — Commit Code
+Call \`commit_code(code, library, description)\` with the complete JavaScript code in the \`code\` parameter.
 
 ### Step 3 — Validate
 Call \`validate_code()\`. If it returns errors, go to Step 4. If warnings only, fix then validate again.
@@ -146,8 +146,9 @@ export async function createAnimationAgent(
   const commitCodeTool: ToolDefinition<any> = {
     name: "commit_code",
     label: "Commit Draft Code",
-    description: "Commit the latest JavaScript markdown code block from assistant text into current editable code.",
+    description: "Commit JavaScript animation code. Pass the complete code directly in the `code` parameter.",
     parameters: Type.Object({
+      code: Type.String({ description: "The complete JavaScript animation code to commit" }),
       library: Type.Union(
         [Type.Literal("gsap"), Type.Literal("anime"), Type.Literal("pixi"), Type.Literal("three")],
         { description: "Which animation library this code uses" }
@@ -155,11 +156,11 @@ export async function createAnimationAgent(
       description: Type.String({ description: "Brief description of this committed code" }),
     }),
     execute: async (_toolCallId, params) => {
-      const draftCode = extractLatestJsCodeBlock(assistantDraftText);
-      if (!draftCode) {
-        throw new Error("No JavaScript markdown code block found in latest assistant output. Output a ```js code block first, then call commit_code.");
+      const code = params.code?.trim();
+      if (!code) {
+        throw new Error("code parameter is required and must not be empty.");
       }
-      currentCode = draftCode;
+      currentCode = code;
       currentLibrary = params.library;
       sendSSE(res, {
         type: "code_update",
