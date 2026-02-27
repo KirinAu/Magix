@@ -46,6 +46,7 @@ document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 \`\`\`
 
 ## Tools
+**IMPORTANT: Call only ONE tool at a time. Wait for the result before calling the next tool.**
 - **read_code()** — read current committed code before str_replace.
 - **commit_code(code, library, description)** — commit JavaScript code directly via the \`code\` parameter. Do NOT output a markdown code block separately; pass the full code as the \`code\` argument. \`library\` must be one of: \`gsap\`, \`anime\`, \`pixi\`, \`three\`, \`canvas\`. **You MUST call validate_code immediately after every commit_code. No exceptions.**
 - **str_replace(old_str, new_str, description)** — targeted edit on committed code. \`old_str\` must be unique and exact. **You MUST call validate_code immediately after every str_replace. No exceptions.**
