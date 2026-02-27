@@ -107,7 +107,7 @@ function buildModel(config: LLMConfig): Model<any> {
         ? "https://generativelanguage.googleapis.com/v1beta"
         : "https://api.openai.com"),
     reasoning: isThinkingModel,
-    input: ["text"],
+    input: ["text", "image"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: 200000,
     maxTokens: 64000,

@@ -246,7 +246,12 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
   };
 
   try {
-    await session.agent.prompt(message, { images: images ?? [] });
+    const sdkImages = (images ?? []).map((img: any) => ({
+      type: "image" as const,
+      data: img.data,
+      mimeType: img.mediaType,
+    }));
+   await session.agent.prompt(message, { images: sdkImages });
   } catch (err: any) {
     sendSSE(origRes, { type: "error", message: err.message });
     origRes.end();
