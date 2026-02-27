@@ -4,9 +4,10 @@ import { Type } from "@sinclair/typebox";
 import { Response } from "express";
 import { validateCode } from "./validator";
 
-// 动态 import ESM 包
+// 用 new Function 绕过 tsc 把 import() 编译成 require() 的问题
 async function loadCodingAgent() {
-  const mod = await import("@mariozechner/pi-coding-agent");
+  // eslint-disable-next-line no-new-func
+  const mod = await (new Function('return import("@mariozechner/pi-coding-agent")')() as Promise<typeof import("@mariozechner/pi-coding-agent")>);
   return mod;
 }
 
