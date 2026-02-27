@@ -244,7 +244,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
     const imgs = pendingImages.map(({ type, mediaType, data }) => ({ type, mediaType, data }));
     setMessages((prev) => [
       ...prev,
-      { id: Date.now().toString(), role: "user", content: text, timestamp: Date.now() },
+      { id: Date.now().toString(), role: "user", content: text, timestamp: Date.now(), images: pendingImages.map(i => i.preview) },
     ]);
     setInput("");
     setPendingImages([]);
@@ -303,10 +303,23 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
             ) : (
               <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
                 msg.role === "user"
-                  ? "bg-gray-900 text-white rounded-br-sm whitespace-pre-wrap"
+                  ? "bg-gray-900 text-white rounded-br-sm"
                   : "bg-gray-100 text-gray-800 rounded-bl-sm prose prose-sm max-w-none"
               }`}>
-                {msg.role === "user" ? msg.content : <ReactMarkdown>{msg.content}</ReactMarkdown>}
+                {msg.role === "user" ? (
+                  <div className="space-y-2">
+                    {msg.images && msg.images.length > 0 && (
+                      <div className="flex gap-1.5 flex-wrap">
+                        {msg.images.map((src, i) => (
+                          <img key={i} src={src} className="w-20 h-20 rounded-lg object-cover opacity-90" />
+                        ))}
+                      </div>
+                    )}
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  </div>
+                ) : (
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                )}
               </div>
             )}
           </div>

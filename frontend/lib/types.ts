@@ -17,9 +17,8 @@ export interface SessionInfo {
 
 export interface SessionDetail extends SessionInfo {
   messages: ChatMessage[];
+  renderJob: RenderJob | null;
 }
-
-// SSE 事件类型（来自 backend）
 export type AgentEventType =
   | "session_ready"
   | "agent_start"
@@ -45,6 +44,7 @@ export interface ChatMessage {
   content: string;
   toolName?: string;
   timestamp: number;
+  images?: string[]; // preview URLs (仅前端展示用)
 }
 
 export interface RenderParams {
@@ -92,9 +92,4 @@ export interface RenderJob {
   total: number;
   outputFile?: string;
   error?: string;
-}
-
-export interface SessionDetail extends SessionInfo {
-  messages: ChatMessage[];
-  renderJob: RenderJob | null;
 }
