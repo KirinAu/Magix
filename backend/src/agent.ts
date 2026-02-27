@@ -243,7 +243,7 @@ export async function createAnimationAgent(
   });
 
   session.subscribe((event: AgentSessionEvent) => {
-    if (event.type === "agent_start") {
+    if (event.type === "agent_start" || event.type === "turn_start") {
       assistantDraftText = "";
     }
     if (event.type === "message_update") {
