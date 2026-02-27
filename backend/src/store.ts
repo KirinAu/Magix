@@ -69,6 +69,21 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+
+  CREATE TABLE IF NOT EXISTS render_jobs (
+    job_id      TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+    username    TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    progress    INTEGER NOT NULL DEFAULT 0,
+    total       INTEGER NOT NULL DEFAULT 0,
+    output_file TEXT,
+    error       TEXT,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_render_jobs_session ON render_jobs(session_id);
 `);
 
 // ─── 预编译语句 ──────────────────────────────────────────────────────────────
@@ -84,6 +99,11 @@ const stmts = {
   insertMessage:  db.prepare("INSERT INTO messages (session_id, role, content, tool_name, timestamp) VALUES (?, ?, ?, ?, ?)"),
   getMessages:    db.prepare("SELECT role, content, tool_name, timestamp FROM messages WHERE session_id = ? ORDER BY id ASC"),
   deleteMessages: db.prepare("DELETE FROM messages WHERE session_id = ?"),
+  // render jobs
+  insertRenderJob:  db.prepare("INSERT INTO render_jobs (job_id, session_id, username, status, progress, total, created_at, updated_at) VALUES (?, ?, ?, 'pending', 0, ?, ?, ?)"),
+  updateRenderJob:  db.prepare("UPDATE render_jobs SET status=?, progress=?, total=?, output_file=?, error=?, updated_at=? WHERE job_id=?"),
+  getRenderJob:     db.prepare("SELECT * FROM render_jobs WHERE job_id = ?"),
+  getSessionRenderJob: db.prepare("SELECT * FROM render_jobs WHERE session_id = ? ORDER BY created_at DESC LIMIT 1"),
 };
 
 // ─── 用户操作 ────────────────────────────────────────────────────────────────
@@ -188,4 +208,69 @@ export function deleteSession(username: string, sessionId: string): boolean {
 export function listSessions(username: string): Omit<UserSession, "messages">[] {
   const rows = stmts.listSessions.all(username) as any[];
   return rows.map((r) => rowToSession(r, false));
+}
+
+// ─── 渲染 Job 操作 ────────────────────────────────────────────────────────────
+
+export interface RenderJobRecord {
+  jobId: string;
+  sessionId: string;
+  username: string;
+  status: "pending" | "rendering" | "encoding" | "done" | "error";
+  progress: number;
+  total: number;
+  outputFile?: string;
+  error?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+function rowToRenderJob(row: any): RenderJobRecord {
+  return {
+    jobId: row.job_id,
+    sessionId: row.session_id,
+    username: row.username,
+    status: row.status,
+    progress: row.progress,
+    total: row.total,
+    outputFile: row.output_file ?? undefined,
+    error: row.error ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function createRenderJob(jobId: string, sessionId: string, username: string, total: number): RenderJobRecord {
+  const now = Date.now();
+  stmts.insertRenderJob.run(jobId, sessionId, username, total, now, now);
+  return { jobId, sessionId, username, status: "pending", progress: 0, total, createdAt: now, updatedAt: now };
+}
+
+export function updateRenderJob(
+  jobId: string,
+  patch: Partial<Pick<RenderJobRecord, "status" | "progress" | "total" | "outputFile" | "error">>
+): void {
+  const row = stmts.getRenderJob.get(jobId) as any;
+  if (!row) return;
+  stmts.updateRenderJob.run(
+    patch.status ?? row.status,
+    patch.progress ?? row.progress,
+    patch.total ?? row.total,
+    patch.outputFile ?? row.output_file ?? null,
+    patch.error ?? row.error ?? null,
+    Date.now(),
+    jobId
+  );
+}
+
+export function getRenderJob(jobId: string): RenderJobRecord | null {
+  const row = stmts.getRenderJob.get(jobId);
+  if (!row) return null;
+  return rowToRenderJob(row);
+}
+
+export function getSessionRenderJob(sessionId: string): RenderJobRecord | null {
+  const row = stmts.getSessionRenderJob.get(sessionId);
+  if (!row) return null;
+  return rowToRenderJob(row);
 }

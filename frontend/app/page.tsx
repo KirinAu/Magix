@@ -9,7 +9,7 @@ import DebugPanel from "@/components/DebugPanel";
 import LoginModal from "@/components/LoginModal";
 import SessionSidebar from "@/components/SessionSidebar";
 import { loadSession, getVideoUrl } from "@/lib/api";
-import type { LLMConfig, RenderParams, LogEntry, ChatMessage, UserInfo, SessionInfo } from "@/lib/types";
+import type { LLMConfig, RenderParams, LogEntry, ChatMessage, UserInfo, SessionInfo, RenderJob } from "@/lib/types";
 
 const DEFAULT_CODE = `// 在这里写你的动画代码，或者让 AI 帮你生成
 // 支持 GSAP 和 Anime.js
@@ -57,6 +57,7 @@ export default function Home() {
     fps: 30, duration: 3, width: 1280, height: 720,
   });
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [activeRenderJob, setActiveRenderJob] = useState<RenderJob | null>(null);
 
   // 从 localStorage 恢复登录状态
   useEffect(() => {
@@ -92,6 +93,7 @@ export default function Home() {
     setVideoUrl(null);
     setTab("code");
     setLogs([]);
+    setActiveRenderJob(null);
   }
 
   // 切换到已有会话
@@ -109,6 +111,7 @@ export default function Home() {
     setVideoUrl(detail.videoPath ? getVideoUrl(detail.videoPath) : null);
     setTab("code");
     setLogs([]);
+    setActiveRenderJob(detail.renderJob ?? null);
   }
 
   // 新建会话
@@ -167,6 +170,7 @@ export default function Home() {
     setVideoUrl(getVideoUrl(outputFile));
     setTab("video");
     setSidebarRefreshTick((t) => t + 1);
+    setActiveRenderJob({ jobId, status: "done", progress: 0, total: 0, outputFile });
   }
 
   return (
@@ -255,6 +259,7 @@ export default function Home() {
             onRenderDone={handleRenderDone}
             username={user?.username}
             sessionId={activeSessionId ?? undefined}
+            initialJob={activeRenderJob}
           />
         </div>
       </main>

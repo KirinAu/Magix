@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { RenderParams, RenderJob } from "@/lib/types";
 import { submitRender, watchRenderJob, getDownloadUrl } from "@/lib/api";
 
@@ -12,6 +12,7 @@ interface RenderPanelProps {
   onRenderDone?: (jobId: string, outputFile: string) => void;
   username?: string;
   sessionId?: string;
+  initialJob?: RenderJob | null;
 }
 
 const PRESETS = [
@@ -22,9 +23,20 @@ const PRESETS = [
   { label: "Square 1:1", width: 1080, height: 1080, fps: 30 },
 ];
 
-export default function RenderPanel({ code, library, params, onParamsChange, onRenderDone, username, sessionId }: RenderPanelProps) {
-  const [job, setJob] = useState<RenderJob | null>(null);
+export default function RenderPanel({ code, library, params, onParamsChange, onRenderDone, username, sessionId, initialJob }: RenderPanelProps) {
+  const [job, setJob] = useState<RenderJob | null>(initialJob ?? null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 切换会话时恢复 job，如果还在跑就重连 SSE
+  useEffect(() => {
+    setJob(initialJob ?? null);
+    if (initialJob && (initialJob.status === "pending" || initialJob.status === "rendering" || initialJob.status === "encoding")) {
+      watchRenderJob(initialJob.jobId, (update) => {
+        setJob({ jobId: initialJob.jobId, ...update });
+        if (update.status === "done") onRenderDone?.(initialJob.jobId, update.outputFile ?? "");
+      });
+    }
+  }, [initialJob?.jobId]);
 
   async function handleRender() {
     if (!code.trim() || isSubmitting) return;

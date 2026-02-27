@@ -86,9 +86,15 @@ export interface LogEntry {
 
 export interface RenderJob {
   jobId: string;
+  sessionId?: string;
   status: "pending" | "rendering" | "encoding" | "done" | "error";
   progress: number;
   total: number;
   outputFile?: string;
   error?: string;
+}
+
+export interface SessionDetail extends SessionInfo {
+  messages: ChatMessage[];
+  renderJob: RenderJob | null;
 }

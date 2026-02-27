@@ -13,6 +13,10 @@ import {
   updateSession,
   deleteSession,
   listSessions,
+  createRenderJob,
+  updateRenderJob,
+  getRenderJob,
+  getSessionRenderJob,
   type ChatMessage as StoredMessage,
 } from "./store";
 
@@ -87,12 +91,13 @@ app.get("/api/users/:username/sessions", (req, res) => {
 
 /**
  * GET /api/users/:username/sessions/:sessionId
- * 获取会话详情（含消息）
+ * 获取会话详情（含消息 + 最新渲染 job）
  */
 app.get("/api/users/:username/sessions/:sessionId", (req, res) => {
   const session = getSession(req.params.username, req.params.sessionId);
   if (!session) { res.status(404).json({ error: "Session not found" }); return; }
-  res.json(session);
+  const renderJob = getSessionRenderJob(req.params.sessionId);
+  res.json({ ...session, renderJob: renderJob ?? null });
 });
 
 /**
@@ -275,18 +280,6 @@ app.post("/api/chat/:sessionId/abort", (req, res) => {
 
 // ─── 渲染 ─────────────────────────────────────────────────────────────────────
 
-interface RenderJob {
-  status: "pending" | "rendering" | "encoding" | "done" | "error";
-  progress: number;
-  total: number;
-  outputFile?: string;
-  error?: string;
-  username?: string;
-  sessionId?: string;
-}
-
-const jobs = new Map<string, RenderJob>();
-
 /**
  * POST /api/render
  * Body: { code, library, fps, duration, width, height, username?, sessionId? }
@@ -300,14 +293,12 @@ app.post("/api/render", async (req, res) => {
   }
 
   const jobId = uuidv4();
-  const job: RenderJob = {
-    status: "pending",
-    progress: 0,
-    total: Math.ceil(fps * duration),
-    username,
-    sessionId,
-  };
-  jobs.set(jobId, job);
+  const total = Math.ceil(fps * duration);
+
+  // 持久化到 DB（需要 sessionId）
+  if (username && sessionId) {
+    createRenderJob(jobId, sessionId, username, total);
+  }
 
   res.json({ jobId });
 
@@ -315,7 +306,7 @@ app.post("/api/render", async (req, res) => {
   const outputFile = path.join(OUTPUT_DIR, `${jobId}.mp4`);
 
   try {
-    job.status = "rendering";
+    if (username && sessionId) updateRenderJob(jobId, { status: "rendering" });
 
     await renderFrames(code, {
       library,
@@ -325,27 +316,22 @@ app.post("/api/render", async (req, res) => {
       height,
       outputDir: framesDir,
       onProgress: (frame, total) => {
-        job.progress = frame;
-        job.total = total;
+        if (username && sessionId) updateRenderJob(jobId, { progress: frame, total });
       },
     });
 
-    job.status = "encoding";
+    if (username && sessionId) updateRenderJob(jobId, { status: "encoding" });
 
     await encodeToMp4({ framesDir, outputPath: outputFile, fps, width, height });
 
     cleanupFrames(framesDir);
 
-    job.status = "done";
-    job.outputFile = `${jobId}.mp4`;
-
-    // 保存视频路径到会话
     if (username && sessionId) {
+      updateRenderJob(jobId, { status: "done", outputFile: `${jobId}.mp4` });
       updateSession(username, sessionId, { videoPath: `${jobId}.mp4` });
     }
   } catch (err: any) {
-    job.status = "error";
-    job.error = err.message;
+    if (username && sessionId) updateRenderJob(jobId, { status: "error", error: err.message });
     cleanupFrames(framesDir);
   }
 });
@@ -354,7 +340,7 @@ app.post("/api/render", async (req, res) => {
  * GET /api/render/:jobId  SSE 进度流
  */
 app.get("/api/render/:jobId", (req, res) => {
-  const job = jobs.get(req.params.jobId);
+  const job = getRenderJob(req.params.jobId);
   if (!job) {
     res.status(404).json({ error: "Job not found" });
     return;
@@ -366,15 +352,18 @@ app.get("/api/render/:jobId", (req, res) => {
   res.flushHeaders();
 
   const interval = setInterval(() => {
+    const current = getRenderJob(req.params.jobId);
+    if (!current) { clearInterval(interval); res.end(); return; }
+
     sendSSE(res, {
-      status: job.status,
-      progress: job.progress,
-      total: job.total,
-      outputFile: job.outputFile,
-      error: job.error,
+      status: current.status,
+      progress: current.progress,
+      total: current.total,
+      outputFile: current.outputFile,
+      error: current.error,
     });
 
-    if (job.status === "done" || job.status === "error") {
+    if (current.status === "done" || current.status === "error") {
       clearInterval(interval);
       res.end();
     }
@@ -387,7 +376,7 @@ app.get("/api/render/:jobId", (req, res) => {
  * GET /api/render/:jobId/download
  */
 app.get("/api/render/:jobId/download", (req, res) => {
-  const job = jobs.get(req.params.jobId);
+  const job = getRenderJob(req.params.jobId);
   if (!job || job.status !== "done" || !job.outputFile) {
     res.status(404).json({ error: "File not ready" });
     return;
