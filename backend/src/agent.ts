@@ -77,8 +77,13 @@ Call \`commit_code(code, library, description)\`. Validation runs automatically 
 If the result contains errors or warnings: call \`read_code()\`, fix with \`str_replace\` (auto-validates). Repeat until ok=true with no warnings. Max 5 rounds.
 
 ### Step 4 — Summarize (MANDATORY — DO NOT SKIP)
-**You MUST output a text reply once ok=true and no warnings. Ending without a reply is forbidden.**
-Write: what was built, which library was used, and the recommended loop duration.
+**If ok=true and there are no warnings, you MUST output a final text summary to the user.** Write: what was built, which library was used, and loop duration.
+
+## CRITICAL: Tool Response Handling
+When you receive the result of \`commit_code\` or \`str_replace\`, **DO NOT STOP**.
+- If the result says "There are errors", you MUST continue by generating a text plan and then calling \`read_code()\`.
+- If the result says "ok=true", you MUST output the Step 4 final text summary.
+**Stopping directly after receiving a tool result is STRICTLY FORBIDDEN.**
 
 ## Visual quality
 - **Aesthetic**: Apple keynote / Stripe / Nike — not CodePen demos.
@@ -119,12 +124,6 @@ function buildModel(config: LLMConfig): Model<any> {
   };
 }
 
-export interface LLMContextMessage {
-  role: "user" | "assistant" | "tool";
-  content: string;
-  toolName?: string;
-  toolArgs?: Record<string, unknown>;
-}
 
 export async function createAnimationAgent(
   config: LLMConfig,
@@ -133,10 +132,6 @@ export async function createAnimationAgent(
   let currentCode = "";
   let currentLibrary = "gsap";
   let res = initialRes;
-
-  // Mirror of what the LLM actually receives each turn
-  const llmContext: LLMContextMessage[] = [];
-  let assistantTextBuffer = "";
 
   const readCodeTool: ToolDefinition<any> = {
     name: "read_code",
@@ -147,7 +142,6 @@ export async function createAnimationAgent(
       const readResult = currentCode ? `Current code:\n\`\`\`js\n${currentCode}\n\`\`\`` : "No code written yet.";
       const summary = currentCode ? `(${currentCode.split("\n").length} lines returned)` : "No code written yet.";
       sendSSE(res, { type: "tool_result_debug", toolName: "read_code", result: summary });
-      llmContext.push({ role: "tool", content: readResult, toolName: "read_code" });
       return {
         content: [{ type: "text" as const, text: readResult }],
         details: { code: currentCode },
@@ -188,14 +182,12 @@ export async function createAnimationAgent(
       parts.push(`\nValidation — ok: ${validation.ok}`);
       if (validation.errors.length) parts.push(`errors:\n${validation.errors.map((e: string) => `  - ${e}`).join("\n")}`);
       if (validation.warnings.length) parts.push(`warnings:\n${validation.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
-      if (validation.ok && validation.warnings.length === 0) parts.push("All checks passed. YOU MUST NOW write a text reply to the user — describe what was built, the library used, and recommended loop duration. Do NOT call any more tools.");
-      if (validation.ok && validation.warnings.length > 0) parts.push("ok=true but warnings exist. Call read_code() then fix with str_replace.");
-      if (!validation.ok) parts.push("There are errors. Call read_code() then fix with str_replace.");
+      if (validation.ok && validation.warnings.length === 0) parts.push("TASK ALMOST COMPLETE: All checks passed. YOU MUST NOW write a text summary to the user! DO NOT STOP without writing your text summary.");
+      if (validation.ok && validation.warnings.length > 0) parts.push("TASK INCOMPLETE: ok=true but warnings exist. You MUST NOT STOP. Call read_code() then fix with str_replace.");
+      if (!validation.ok) parts.push("TASK INCOMPLETE: There are errors. You MUST NOT STOP. Call read_code() then fix with str_replace.");
       const resultText = parts.join("\n");
 
       sendSSE(res, { type: "tool_result_debug", toolName: "commit_code", result: resultText });
-      llmContext.push({ role: "assistant", content: `[tool_call: commit_code]`, toolName: "commit_code", toolArgs: { library: params.library, description: params.description } });
-      llmContext.push({ role: "tool", content: resultText, toolName: "commit_code" });
       return {
         content: [{ type: "text" as const, text: resultText }],
         details: { ...params, code: currentCode, validation },
@@ -226,14 +218,12 @@ export async function createAnimationAgent(
       parts.push(`\nValidation — ok: ${validation.ok}`);
       if (validation.errors.length) parts.push(`errors:\n${validation.errors.map((e: string) => `  - ${e}`).join("\n")}`);
       if (validation.warnings.length) parts.push(`warnings:\n${validation.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
-      if (validation.ok && validation.warnings.length === 0) parts.push("All checks passed. YOU MUST NOW write a text reply to the user — describe what was built, the library used, and recommended loop duration. Do NOT call any more tools.");
-      if (validation.ok && validation.warnings.length > 0) parts.push("ok=true but warnings exist. Call read_code() then fix with str_replace.");
-      if (!validation.ok) parts.push("There are errors. Call read_code() then fix with str_replace.");
+      if (validation.ok && validation.warnings.length === 0) parts.push("TASK ALMOST COMPLETE: All checks passed. YOU MUST NOW write a text summary to the user! DO NOT STOP without writing your text summary.");
+      if (validation.ok && validation.warnings.length > 0) parts.push("TASK INCOMPLETE: ok=true but warnings exist. You MUST NOT STOP. Call read_code() then fix with str_replace.");
+      if (!validation.ok) parts.push("TASK INCOMPLETE: There are errors. You MUST NOT STOP. Call read_code() then fix with str_replace.");
       const strReplaceResult = parts.join("\n");
 
       sendSSE(res, { type: "tool_result_debug", toolName: "str_replace", result: strReplaceResult });
-      llmContext.push({ role: "assistant", content: `[tool_call: str_replace]`, toolName: "str_replace", toolArgs: { description: params.description } });
-      llmContext.push({ role: "tool", content: strReplaceResult, toolName: "str_replace" });
       return {
         content: [{ type: "text" as const, text: strReplaceResult }],
         details: { ...params, resultCode: currentCode, validation },
@@ -258,12 +248,10 @@ export async function createAnimationAgent(
       lines.push(`ok: ${result.ok}`);
       if (result.errors.length) lines.push(`errors:\n${result.errors.map((e: string) => `  - ${e}`).join("\n")}`);
       if (result.warnings.length) lines.push(`warnings:\n${result.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
-      if (result.ok && result.warnings.length === 0) lines.push("All checks passed. YOU MUST NOW write a text reply to the user — describe what was built, the library used, and recommended loop duration. Do NOT call any more tools. Ending without a text reply is forbidden.");
+      if (result.ok && result.warnings.length === 0) lines.push("TASK ALMOST COMPLETE: All checks passed. YOU MUST NOW write a text summary to the user! DO NOT STOP without writing your text summary. Ending without a text reply is forbidden.");
       if (result.ok && result.warnings.length > 0) lines.push("ok=true but warnings exist. Call read_code() first, then fix every warning with str_replace, then call validate_code again.");
       const validateResultText = lines.join("\n");
       sendSSE(res, { type: "tool_result_debug", toolName: "validate_code", result: validateResultText });
-      llmContext.push({ role: "assistant", content: `[tool_call: validate_code]`, toolName: "validate_code" });
-      llmContext.push({ role: "tool", content: validateResultText, toolName: "validate_code" });
       return {
         content: [{ type: "text" as const, text: validateResultText }],
         details: result,
@@ -293,19 +281,31 @@ export async function createAnimationAgent(
 
   session.subscribe((event: AgentSessionEvent) => {
     if (event.type === "turn_start") {
-      // Emit current LLM context snapshot so debug panel shows full message history
-      sendSSE(res, { type: "context_debug", messages: [...llmContext] });
-    }
+      
+      try {
+        const state = (session.agent as any).state || (session.agent as any)._state;
+        const sysPrompt = state?.systemPrompt || SYSTEM_PROMPT;
+        const msgList = state?.messages || [];
+        const formattedMsgs = msgList.map((m: any) => {
+          let content = m.content;
+          if (Array.isArray(m.content)) {
+            content = m.content.map((c: any) => {
+              if (c.type === "text") return c.text;
+              if (c.type === "tool_call") return `[tool_call: ${c.name}]`;
+              if (c.type === "tool_result") return `[tool_result: ${c.name}]\n${c.content?.map((cc:any)=>cc.text).join('')}`;
+              return JSON.stringify(c);
+            }).join("\n");
+          }
+          return { role: m.role, content };
+        });
+        sendSSE(res, { type: "context_debug", messages: [{ role: "system", content: sysPrompt }, ...formattedMsgs] });
+      } catch (e) {
+        console.error("Error formatting context_debug", e);
+      }
 
-    if (event.type === "message_update") {
-      const ae = (event as any).assistantMessageEvent;
-      if (ae?.type === "text_delta") assistantTextBuffer += ae.delta;
     }
 
     if (event.type === "turn_end") {
-      const text = assistantTextBuffer.trim();
-      if (text) llmContext.push({ role: "assistant", content: text });
-      assistantTextBuffer = "";
     }
 
     if (event.type === "agent_end") {
@@ -325,7 +325,7 @@ export async function createAnimationAgent(
     }
   });
 
-  return { session, setRes: (r: Response) => { res = r; }, addUserMessage: (msg: string) => { llmContext.push({ role: "user", content: msg }); } };
+  return { session, setRes: (r: Response) => { res = r; }, addUserMessage: (msg: string) => {} };
 }
 
 export function sendSSE(res: Response, data: unknown): void {
