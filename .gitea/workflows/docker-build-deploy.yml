@@ -30,7 +30,7 @@ jobs:
     steps:
       - name: Checkout repository
         run: |
-          git clone --depth=2 --branch "$GITHUB_REF_NAME" "http://oauth2:${{ github.token }}@gitea.stellaflux.cn/${GITHUB_REPOSITORY}.git" .
+          git clone --depth=2 --branch "$GITHUB_REF_NAME" "https://oauth2:${{ github.token }}@gitea.stellaflux.cn/${GITHUB_REPOSITORY}.git" .
 
       - name: Resolve registry config
         id: cfg
@@ -208,7 +208,7 @@ jobs:
     steps:
       - name: Checkout repository
         run: |
-          git clone --depth=1 --branch "$GITHUB_REF_NAME" "http://oauth2:${{ github.token }}@gitea.stellaflux.cn/${GITHUB_REPOSITORY}.git" .
+          git clone --depth=1 --branch "$GITHUB_REF_NAME" "https://oauth2:${{ github.token }}@gitea.stellaflux.cn/${GITHUB_REPOSITORY}.git" .
 
       - name: Ensure deploy env exists
         env:
