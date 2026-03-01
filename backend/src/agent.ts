@@ -29,8 +29,10 @@ const SYSTEM_PROMPT = `You are an expert animation developer. Write high-quality
   - **Three.js** (\`THREE\`) — 3D scenes, PBR materials, shaders. GSAP also available.
   - **Canvas 2D** — always available via \`document.createElement('canvas')\`.
 - No \`<script>\` tags, HTML, or import statements.
-- Canvas size: \`window.CANVAS_WIDTH\` / \`window.CANVAS_HEIGHT\`. Never hardcode pixel values.
-- Scale: \`window.SCALE\` = min(width/1280, height/720). Multiply all sizes by it.
+- Canvas size: \`window.CANVAS_WIDTH\` / \`window.CANVAS_HEIGHT\`. Never hardcode absolute position/sizes! Use dynamic sizing.
+- **CRITICAL SCALE RULE**: \`window.SCALE\` = min(width/1280, height/720). **You MUST multiply all absolute sizes, fonts, strokes, and line widths by \`window.SCALE\` so the animation does not become tiny on large 4K screens.**
+- Example: \`const radius = 50 * window.SCALE;\`
+- Example coords: \`x: window.CANVAS_WIDTH * 0.5\` (always use percentages of total width/height for positions).
 - Black background. Use the full canvas. Animations must loop or have a clear duration.
 - **PixiJS**: \`new PIXI.Application({width, height, backgroundColor:0})\`, append \`app.view\`. Ticker is auto-stopped — drive properties via GSAP timelines.
 - **Three.js**: Use a RAF loop for rendering (intercepted for seek). **NEVER use \`gsap.ticker.add()\`** — it is not intercepted and produces black frames on export.

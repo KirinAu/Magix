@@ -250,6 +250,52 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
         }
 
         if (evt.type === "agent_end") {
+          // Sync messages from real agent state back to our wrapper
+          try {
+            const agentState = session.agent?.state || session.agent?._state;
+            if (agentState && Array.isArray(agentState.messages)) {
+              const realMsgs: StoredMessage[] = [];
+              for (const m of agentState.messages) {
+                let contentText = "";
+                let toolName = "";
+
+                if (Array.isArray(m.content)) {
+                  contentText = m.content.map((c: any) => {
+                    if (c.type === "text") return c.text;
+                    if (c.type === "image") return "[Image Attached]";
+                    if (c.type === "tool_call") {
+                      toolName = c.name;
+                      return `[Tool Call: ${c.name}]\nArgs: ${JSON.stringify(c.input || c.arguments || {})}`;
+                    }
+                    if (c.type === "tool_result") {
+                      // Avoid overly large tool results in the DB
+                      let resText = (c.content || []).map((cc:any)=>cc.text).join('');
+                      if (resText.length > 500) resText = resText.substring(0, 500) + '...';
+                      return `[Tool Result: ${c.name}]\n${resText}`;
+                    }
+                    return JSON.stringify(c);
+                  }).join("\n");
+                } else {
+                  contentText = String(m.content || "");
+                }
+                
+                if (m.role === "system") continue;
+
+                realMsgs.push({
+                  role: m.role as any,
+                  content: contentText,
+                  toolName: toolName || undefined,
+                  timestamp: m.timestamp || Date.now()
+                });
+              }
+              if (realMsgs.length > 0) {
+                session.messages = realMsgs;
+              }
+            }
+          } catch(e) {
+            console.error("Error sync messages", e);
+          }
+
           // 持久化到 store
           updateSession(session.username, sessionId, {
             messages: [...session.messages],
