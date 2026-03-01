@@ -60,7 +60,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
     setAssistantText("");
     setIsStreaming(false);
     setToolStatus(null);
-  }, [initialMessages, activeSessionId]);
+  }, [initialMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -225,6 +225,15 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
           ...prev,
           { id: Date.now().toString(), role: "assistant", content: text, timestamp: Date.now() },
         ]);
+        onLog({
+          id: mkId(),
+          kind: "info",
+          label: "turn_end",
+          detail: text,
+          timestamp: Date.now(),
+        });
+      } else {
+        onLog({ id: mkId(), kind: "info", label: "turn_end (no assistant text)", timestamp: Date.now() });
       }
       return;
     }

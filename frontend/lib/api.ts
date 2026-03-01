@@ -202,5 +202,5 @@ export async function stopRenderJob(jobId: string): Promise<void> {
 
 // 直接用静态路由访问已保存的视频文件（服务重启后仍有效）
 export function getVideoUrl(filename: string): string {
-  return `${BACKEND}/outputs/${filename}`;
+  return `${BACKEND}/api/outputs/${filename}`;
 }

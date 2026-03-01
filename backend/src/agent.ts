@@ -78,14 +78,26 @@ Call \`commit_code(code, library, description)\`. Validation runs automatically 
 ### Step 3 — Fix if needed
 If the result contains errors or warnings: call \`read_code()\`, fix with \`str_replace\` (auto-validates). Repeat until ok=true with no warnings. Max 5 rounds.
 
-### Step 4 — Summarize (MANDATORY — DO NOT SKIP)
-**If ok=true and there are no warnings, you MUST output a final text summary to the user.** Write: what was built, which library was used, and loop duration.
+### Step 3.5 — Self-Review (MANDATORY before final summary)
+When \`ok=true\` and no warnings:
+1. Call \`read_code()\` and review the code quality once.
+2. If you find any weakness (readability, visual polish, performance, scaling, cleanup, timing), fix it with \`str_replace\`.
+3. Re-check using \`validate_code()\` if you made edits.
+4. Repeat this self-review loop up to 2 rounds, then continue.
+
+### Step 4 — Final Summary (MANDATORY — DO NOT SKIP)
+**You MUST output a final text summary to the user.**
+Your summary must include:
+- What was built
+- Which library was used
+- **Estimated loop duration in seconds** (required, e.g. \`Loop: ~3.2s\`)
 
 ## CRITICAL: Tool Response Handling
 When you receive the result of \`commit_code\` or \`str_replace\`, **DO NOT STOP**.
 - If the result says "There are errors", you MUST continue by generating a text plan and then calling \`read_code()\`.
-- If the result says "ok=true", you MUST output the Step 4 final text summary.
+- If the result says "ok=true", you MUST run Step 3.5 self-review, then output the Step 4 final text summary.
 **Stopping directly after receiving a tool result is STRICTLY FORBIDDEN.**
+If you have not produced the final text summary yet, the task is NOT complete.
 
 ## Visual quality
 - **Aesthetic**: Apple keynote / Stripe / Nike — not CodePen demos.
@@ -189,7 +201,7 @@ export async function createAnimationAgent(
       parts.push(`\nValidation — ok: ${validation.ok}`);
       if (validation.errors.length) parts.push(`errors:\n${validation.errors.map((e: string) => `  - ${e}`).join("\n")}`);
       if (validation.warnings.length) parts.push(`warnings:\n${validation.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
-      if (validation.ok && validation.warnings.length === 0) parts.push("TASK ALMOST COMPLETE: All checks passed. YOU MUST NOW write a text summary to the user! DO NOT STOP without writing your text summary.");
+      if (validation.ok && validation.warnings.length === 0) parts.push("TASK ALMOST COMPLETE: All checks passed. You MUST do one self-review pass (read_code, optional str_replace), then write final summary with estimated loop duration in seconds. DO NOT STOP.");
       if (validation.ok && validation.warnings.length > 0) parts.push("TASK INCOMPLETE: ok=true but warnings exist. You MUST NOT STOP. Call read_code() then fix with str_replace.");
       if (!validation.ok) parts.push("TASK INCOMPLETE: There are errors. You MUST NOT STOP. Call read_code() then fix with str_replace.");
       const resultText = parts.join("\n");
@@ -225,7 +237,7 @@ export async function createAnimationAgent(
       parts.push(`\nValidation — ok: ${validation.ok}`);
       if (validation.errors.length) parts.push(`errors:\n${validation.errors.map((e: string) => `  - ${e}`).join("\n")}`);
       if (validation.warnings.length) parts.push(`warnings:\n${validation.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
-      if (validation.ok && validation.warnings.length === 0) parts.push("TASK ALMOST COMPLETE: All checks passed. YOU MUST NOW write a text summary to the user! DO NOT STOP without writing your text summary.");
+      if (validation.ok && validation.warnings.length === 0) parts.push("TASK ALMOST COMPLETE: All checks passed. You MUST do one self-review pass (read_code, optional str_replace), then write final summary with estimated loop duration in seconds. DO NOT STOP.");
       if (validation.ok && validation.warnings.length > 0) parts.push("TASK INCOMPLETE: ok=true but warnings exist. You MUST NOT STOP. Call read_code() then fix with str_replace.");
       if (!validation.ok) parts.push("TASK INCOMPLETE: There are errors. You MUST NOT STOP. Call read_code() then fix with str_replace.");
       const strReplaceResult = parts.join("\n");
@@ -255,7 +267,7 @@ export async function createAnimationAgent(
       lines.push(`ok: ${result.ok}`);
       if (result.errors.length) lines.push(`errors:\n${result.errors.map((e: string) => `  - ${e}`).join("\n")}`);
       if (result.warnings.length) lines.push(`warnings:\n${result.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
-      if (result.ok && result.warnings.length === 0) lines.push("TASK ALMOST COMPLETE: All checks passed. YOU MUST NOW write a text summary to the user! DO NOT STOP without writing your text summary. Ending without a text reply is forbidden.");
+      if (result.ok && result.warnings.length === 0) lines.push("TASK ALMOST COMPLETE: All checks passed. You MUST do one self-review pass (read_code, optional str_replace), then write final summary with estimated loop duration in seconds. Ending without final summary is forbidden.");
       if (result.ok && result.warnings.length > 0) lines.push("ok=true but warnings exist. Call read_code() first, then fix every warning with str_replace, then call validate_code again.");
       const validateResultText = lines.join("\n");
       sendSSE(res, { type: "tool_result_debug", toolName: "validate_code", result: validateResultText });
