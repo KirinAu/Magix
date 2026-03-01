@@ -250,6 +250,14 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
     return result;
   };
 
+  // 发送 debug 事件：当前完整历史 + 本条消息
+  sendSSE(res, {
+    type: "request_debug",
+    userMessage: message,
+    history: session.messages,
+    historyLength: session.messages.length,
+  });
+
   try {
     const sdkImages = (images ?? []).map((img: any) => ({
       type: "image" as const,

@@ -89,6 +89,13 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
       return;
     }
 
+    if (type === "request_debug") {
+      const histLen = event.historyLength ?? 0;
+      const detail = JSON.stringify({ userMessage: event.userMessage, history: event.history }, null, 2);
+      onLog({ id: mkId(), kind: "request", label: `→ 发送请求 (历史 ${histLen} 条)`, detail, timestamp: Date.now() });
+      return;
+    }
+
     if (type === "agent_start") {
       setIsStreaming(true);
       setAssistantText("");

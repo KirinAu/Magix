@@ -31,6 +31,7 @@ export type AgentEventType =
   | "tool_execution_start"
   | "tool_execution_update"
   | "tool_execution_end"
+  | "request_debug"
   | "error";
 
 export interface SSEEvent {
