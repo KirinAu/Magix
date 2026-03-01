@@ -51,7 +51,13 @@ document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 - **commit_code(code, library, description)** — commit JavaScript code directly via the \`code\` parameter. Do NOT output a markdown code block separately; pass the full code as the \`code\` argument. \`library\` must be one of: \`gsap\`, \`anime\`, \`pixi\`, \`three\`, \`canvas\`. **You MUST call validate_code immediately after every commit_code. No exceptions.**
 - **str_replace(old_str, new_str, description)** — targeted edit on committed code. \`old_str\` must be unique and exact. **You MUST call validate_code immediately after every str_replace. No exceptions.**
 - **validate_code()** — runs static + browser runtime checks on committed code. Returns \`ok\`, \`errors\`, \`warnings\`. **You MUST call this after every commit_code or str_replace. You MUST NOT finish until validate_code returns ok=true.**
-
+## Handling user feedback
+**If the user reports a runtime error or visual problem (e.g. "X is not defined", "it doesn't work", "wrong shape"):**
+1. Call `read_code()` to get the current code.
+2. Fix the issue with `str_replace` or `commit_code`.
+3. Call `validate_code()`.
+4. Only after ok=true: write a reply summarizing what was fixed.
+**NEVER call validate_code as your first response to user feedback — always read_code first.**
 ## Workflow
 **IMPORTANT: Follow these steps in strict order.**
 
@@ -72,8 +78,9 @@ Call \`validate_code()\`. If it returns errors, go to Step 4. If warnings only, 
 ### Step 4 — Fix
 Call \`read_code()\` to get the exact current code, then fix every issue with \`str_replace\`, then call \`validate_code()\` again. Repeat until \`ok=true\` and no warnings. Max 5 fix rounds.
 
-### Step 5 — Summarize
-Only after \`validate_code\` returns \`ok=true\`: short reply with what was built + recommended loop duration.
+### Step 5 — Summarize (MANDATORY — DO NOT SKIP)
+**You MUST output a text reply after validate_code returns ok=true. Ending without a reply is forbidden.**
+Write: what was built, which library was used, and the recommended loop duration.
 
 ## Visual quality
 - **Aesthetic**: Apple keynote / Stripe / Nike — not CodePen demos.
@@ -230,8 +237,8 @@ export async function createAnimationAgent(
       lines.push(`ok: ${result.ok}`);
       if (result.errors.length) lines.push(`errors:\n${result.errors.map((e: string) => `  - ${e}`).join("\n")}`);
       if (result.warnings.length) lines.push(`warnings:\n${result.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
-      if (result.ok && result.warnings.length === 0) lines.push("All checks passed. You may now summarize.");
-      if (result.ok && result.warnings.length > 0) lines.push("ok=true but warnings exist. Fix the warnings with str_replace, then call validate_code again.");
+      if (result.ok && result.warnings.length === 0) lines.push("All checks passed. YOU MUST NOW write a text reply to the user — describe what was built, the library used, and recommended loop duration. Do NOT call any more tools. Ending without a text reply is forbidden.");
+      if (result.ok && result.warnings.length > 0) lines.push("ok=true but warnings exist. Call read_code() first, then fix every warning with str_replace, then call validate_code again.");
       const validateResultText = lines.join("\n");
       sendSSE(res, { type: "tool_result_debug", toolName: "validate_code", result: validateResultText });
       llmContext.push({ role: "assistant", content: `[tool_call: validate_code]`, toolName: "validate_code" });
