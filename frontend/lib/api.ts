@@ -40,35 +40,66 @@ export async function startSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...config, username }),
   });
+  if (!res.ok) {
+    let error = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      error = body?.error || error;
+    } catch {}
+    throw new Error(error);
+  }
 
   const sessionId = res.headers.get("X-Session-Id") ?? "";
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let closed = false;
+  let isReady = false;
+  let readyResolve: () => void = () => {};
+  let readyReject: (reason?: unknown) => void = () => {};
+
+  const ready = new Promise<void>((resolve, reject) => {
+    readyResolve = resolve;
+    readyReject = reject;
+  });
 
   const close = () => {
     closed = true;
     reader.cancel();
+    if (!isReady) readyReject(new Error("Session closed before ready"));
   };
 
   (async () => {
-    while (!closed) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          try {
-            onEvent(JSON.parse(line.slice(6)));
-          } catch {}
+    try {
+      while (!closed) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const evt = JSON.parse(line.slice(6));
+              onEvent(evt);
+              if (evt.type === "session_ready") {
+                isReady = true;
+                readyResolve();
+              }
+              if (evt.type === "error" && !isReady) {
+                readyReject(new Error(evt.message || "Session init failed"));
+              }
+            } catch {}
+          }
         }
       }
+      if (!closed && !isReady) readyReject(new Error("Session ended before ready"));
+    } catch (err) {
+      if (!isReady) readyReject(err);
     }
   })();
 
+  await ready;
   return { sessionId, close };
 }
 
@@ -76,13 +107,23 @@ export async function sendMessage(
   sessionId: string,
   message: string,
   onEvent: (event: any) => void,
-  images?: Array<{ type: "base64"; mediaType: string; data: string }>
+  images?: Array<{ type: "base64"; mediaType: string; data: string }>,
+  username?: string,
+  llmConfig?: { provider: string; modelId: string; apiKey: string; baseUrl?: string }
 ): Promise<() => void> {
   const res = await fetch(`${BACKEND}/api/chat/${sessionId}/message`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, images }),
+    body: JSON.stringify({ message, images, username, llmConfig }),
   });
+  if (!res.ok) {
+    let error = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      error = body?.error || error;
+    } catch {}
+    throw new Error(error);
+  }
 
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();

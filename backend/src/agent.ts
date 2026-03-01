@@ -129,10 +129,15 @@ function buildModel(config: LLMConfig): Model<any> {
 
 export async function createAnimationAgent(
   config: LLMConfig,
-  initialRes: Response
-): Promise<{ session: any; setRes: (r: Response) => void; addUserMessage: (msg: string) => void }> {
-  let currentCode = "";
-  let currentLibrary = "gsap";
+  initialRes: Response,
+  options?: {
+    sessionManager?: any;
+    initialCode?: string;
+    initialLibrary?: string;
+  }
+): Promise<{ session: any; setRes: (r: Response) => void }> {
+  let currentCode = options?.initialCode ?? "";
+  let currentLibrary = options?.initialLibrary ?? "gsap";
   let res = initialRes;
 
   const readCodeTool: ToolDefinition<any> = {
@@ -276,7 +281,7 @@ export async function createAnimationAgent(
     model,
     tools: [],
     customTools: [readCodeTool, commitCodeTool, strReplaceTool, validateCodeTool],
-    sessionManager: SessionManager.inMemory(),
+    sessionManager: options?.sessionManager ?? SessionManager.inMemory(),
     authStorage,
     resourceLoader,
   });
@@ -289,14 +294,19 @@ export async function createAnimationAgent(
         const sysPrompt = state?.systemPrompt || SYSTEM_PROMPT;
         const msgList = state?.messages || [];
         const formattedMsgs = msgList.map((m: any) => {
-          let content = m.content;
-          if (Array.isArray(m.content)) {
+          let content = "";
+          if (m.role === "toolResult") {
+            content = `[toolResult: ${m.toolName}]\n${(m.content ?? []).map((c: any) => c?.text ?? "").join("")}`;
+          } else if (Array.isArray(m.content)) {
             content = m.content.map((c: any) => {
               if (c.type === "text") return c.text;
-              if (c.type === "tool_call") return `[tool_call: ${c.name}]`;
-              if (c.type === "tool_result") return `[tool_result: ${c.name}]\n${c.content?.map((cc:any)=>cc.text).join('')}`;
+              if (c.type === "thinking") return `[thinking]\n${c.thinking}`;
+              if (c.type === "toolCall") return `[toolCall: ${c.name}]`;
+              if (c.type === "image") return "[image]";
               return JSON.stringify(c);
             }).join("\n");
+          } else if (typeof m.content === "string") {
+            content = m.content;
           }
           return { role: m.role, content };
         });
@@ -311,13 +321,13 @@ export async function createAnimationAgent(
     }
 
     if (event.type === "agent_end") {
-      const lastMsg = (event as any).messages?.[(event as any).messages.length - 1] as any;
+      const evMsgs = (event as any).messages ?? [];
+      const lastMsg = evMsgs[evMsgs.length - 1] as any;
       if (lastMsg?.stopReason === "error") {
         console.error("[agent_end error] lastMsg:", JSON.stringify(lastMsg, null, 2));
-        const errText = lastMsg.content
-          ?.filter((c: any) => c.type === "text")
-          .map((c: any) => c.text)
-          .join("") || "请求失败";
+        const errText = lastMsg.errorMessage
+          || lastMsg.content?.filter((c: any) => c.type === "text").map((c: any) => c.text).join("")
+          || "请求失败";
         sendSSE(res, { type: "error", message: errText });
       }
     }
@@ -327,7 +337,7 @@ export async function createAnimationAgent(
     }
   });
 
-  return { session, setRes: (r: Response) => { res = r; }, addUserMessage: (msg: string) => {} };
+  return { session, setRes: (r: Response) => { res = r; } };
 }
 
 export function sendSSE(res: Response, data: unknown): void {

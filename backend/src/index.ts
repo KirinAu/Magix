@@ -24,11 +24,11 @@ import {
 interface Session {
   agent: any;
   setRes: (r: import("express").Response) => void;
-  addUserMessage: (msg: string) => void;
   username: string;
   messages: StoredMessage[];
   currentCode: string;
   currentLibrary: string;
+  ready: boolean;
 }
 
 const app = express();
@@ -36,6 +36,7 @@ const PORT = process.env.PORT || 3001;
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "outputs");
 const OUTPUT_DIR = path.join(DATA_DIR, "outputs");
 const CONFIG_FILE = path.join(DATA_DIR, "llm_config.json");
+const PI_SESSION_DIR = path.join(DATA_DIR, "pi_sessions");
 
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
@@ -43,6 +44,99 @@ app.use("/outputs", express.static(OUTPUT_DIR));
 app.use("/libs", express.static(path.join(process.cwd(), "libs")));
 
 fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+fs.mkdirSync(PI_SESSION_DIR, { recursive: true });
+
+let cachedSessionManagerCtor: any | null = null;
+
+async function loadSessionManagerCtor() {
+  if (cachedSessionManagerCtor) return cachedSessionManagerCtor;
+  // eslint-disable-next-line no-new-func
+  const mod = await (new Function('return import("@mariozechner/pi-coding-agent")')() as Promise<typeof import("@mariozechner/pi-coding-agent")>);
+  cachedSessionManagerCtor = mod.SessionManager;
+  return cachedSessionManagerCtor;
+}
+
+function getPiSessionFile(sessionId: string): string {
+  return path.join(PI_SESSION_DIR, `${sessionId}.jsonl`);
+}
+
+function mapProviderToApi(provider: string): string {
+  if (provider === "anthropic") return "anthropic-messages";
+  if (provider === "google") return "google-generative-ai";
+  return "openai-completions";
+}
+
+function createZeroUsage() {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  };
+}
+
+function loadPersistedConfig(): LLMConfig | null {
+  try {
+    if (!fs.existsSync(CONFIG_FILE)) return null;
+    return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8")) as LLMConfig;
+  } catch {
+    return null;
+  }
+}
+
+async function openOrCreateFrameworkSessionManager(sessionId: string, createIfMissing = true): Promise<any | null> {
+  const SessionManager = await loadSessionManagerCtor();
+  const sessionFile = getPiSessionFile(sessionId);
+  if (fs.existsSync(sessionFile)) {
+    return SessionManager.open(sessionFile, PI_SESSION_DIR);
+  }
+  if (!createIfMissing) return null;
+
+  const manager = SessionManager.create(process.cwd(), PI_SESSION_DIR);
+  const generated = manager.getSessionFile?.();
+  if (generated && generated !== sessionFile) {
+    if (fs.existsSync(sessionFile)) {
+      try { fs.unlinkSync(generated); } catch {}
+    } else {
+      fs.renameSync(generated, sessionFile);
+    }
+    manager.setSessionFile?.(sessionFile);
+  }
+  return manager;
+}
+
+function hydrateSessionManagerFromStoredMessages(sessionManager: any, messages: StoredMessage[], config: LLMConfig): void {
+  if (!sessionManager || !Array.isArray(messages)) return;
+  if ((sessionManager.getEntries?.() ?? []).length > 0) return;
+
+  const api = mapProviderToApi(config.provider);
+  for (const m of messages) {
+    if (m.role === "user") {
+      sessionManager.appendMessage({
+        role: "user",
+        content: m.content,
+        timestamp: m.timestamp || Date.now(),
+      });
+      continue;
+    }
+
+    if (m.role === "assistant" || m.role === "thinking") {
+      const text = m.role === "thinking" ? `[thinking]\n${m.content}` : m.content;
+      sessionManager.appendMessage({
+        role: "assistant",
+        content: [{ type: "text", text }],
+        api,
+        provider: config.provider,
+        model: config.modelId,
+        usage: createZeroUsage(),
+        stopReason: "stop",
+        timestamp: m.timestamp || Date.now(),
+      });
+    }
+  }
+}
 
 // ─── LLM 配置持久化 ───────────────────────────────────────────────────────────
 
@@ -117,6 +211,45 @@ app.delete("/api/users/:username/sessions/:sessionId", (req, res) => {
 const sessions = new Map<string, Session>();
 const renderAbortControllers = new Map<string, AbortController>();
 
+async function restoreRuntimeSession(
+  sessionId: string,
+  username: string | undefined,
+  res: import("express").Response,
+  runtimeConfig?: LLMConfig
+): Promise<Session | undefined> {
+  if (!username) return undefined;
+  const normalized = username.trim().toLowerCase();
+  if (!normalized) return undefined;
+
+  const stored = getSession(normalized, sessionId);
+  if (!stored) return undefined;
+
+  const config = runtimeConfig?.apiKey && runtimeConfig?.modelId ? runtimeConfig : loadPersistedConfig();
+  if (!config?.apiKey || !config?.modelId) return undefined;
+
+  const sessionManager = await openOrCreateFrameworkSessionManager(sessionId, true);
+  if (!sessionManager) return undefined;
+  hydrateSessionManagerFromStoredMessages(sessionManager, stored.messages, config);
+
+  const { session, setRes } = await createAnimationAgent(config, res, {
+    sessionManager,
+    initialCode: stored.code,
+    initialLibrary: stored.library,
+  });
+
+  const restored: Session = {
+    agent: session,
+    setRes,
+    username: normalized,
+    messages: [...stored.messages],
+    currentCode: stored.code,
+    currentLibrary: stored.library,
+    ready: true,
+  };
+  sessions.set(sessionId, restored);
+  return restored;
+}
+
 /**
  * POST /api/chat/start
  * 创建新的 Agent 会话，返回 sessionId
@@ -144,21 +277,27 @@ app.post("/api/chat/start", async (req, res) => {
   const memSession: Session = {
     agent: null as any,
     setRes: () => {},
-    addUserMessage: () => {},
     username: resolvedUsername,
     messages: [],
     currentCode: "",
     currentLibrary: "gsap",
+    ready: false,
   };
   sessions.set(sessionId, memSession);
 
-  const { session, setRes, addUserMessage } = await createAnimationAgent(config, res);
-  memSession.agent = session;
-  memSession.setRes = setRes;
-  memSession.addUserMessage = addUserMessage;
-
-  sendSSE(res, { type: "session_ready", sessionId });
-  res.end();
+  try {
+    const sessionManager = await openOrCreateFrameworkSessionManager(sessionId, true);
+    const { session, setRes } = await createAnimationAgent(config, res, { sessionManager });
+    memSession.agent = session;
+    memSession.setRes = setRes;
+    memSession.ready = true;
+    sendSSE(res, { type: "session_ready", sessionId });
+    res.end();
+  } catch (err: any) {
+    sessions.delete(sessionId);
+    sendSSE(res, { type: "error", message: err?.message || "Failed to initialize session" });
+    res.end();
+  }
 });
 
 /**
@@ -168,16 +307,24 @@ app.post("/api/chat/start", async (req, res) => {
  */
 app.post("/api/chat/:sessionId/message", async (req, res) => {
   const { sessionId } = req.params;
-  const { message, images } = req.body;  // images: Array<{ type: "base64", mediaType: string, data: string }>
+  const { message, images, username, llmConfig } = req.body;  // images: Array<{ type: "base64", mediaType: string, data: string }>
 
   if (!message) {
     res.status(400).json({ error: "message is required" });
     return;
   }
 
-  const session = sessions.get(sessionId);
+  let session = sessions.get(sessionId);
   if (!session) {
-    res.status(404).json({ error: "Session not found" });
+    session = await restoreRuntimeSession(sessionId, username, res, llmConfig);
+    if (!session) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+  }
+
+  if (!session.ready || !session.agent) {
+    res.status(409).json({ error: "Session is not ready yet" });
     return;
   }
 
@@ -262,29 +409,36 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
                 if (Array.isArray(m.content)) {
                   contentText = m.content.map((c: any) => {
                     if (c.type === "text") return c.text;
+                    if (c.type === "thinking") return `[Thinking]\n${c.thinking}`;
                     if (c.type === "image") return "[Image Attached]";
-                    if (c.type === "tool_call") {
+                    if (c.type === "toolCall") {
                       toolName = c.name;
-                      return `[Tool Call: ${c.name}]\nArgs: ${JSON.stringify(c.input || c.arguments || {})}`;
-                    }
-                    if (c.type === "tool_result") {
-                      // Avoid overly large tool results in the DB
-                      let resText = (c.content || []).map((cc:any)=>cc.text).join('');
-                      if (resText.length > 500) resText = resText.substring(0, 500) + '...';
-                      return `[Tool Result: ${c.name}]\n${resText}`;
+                      return `[Tool Call: ${c.name}]\nArgs: ${JSON.stringify(c.arguments || {})}`;
                     }
                     return JSON.stringify(c);
                   }).join("\n");
+                } else if (m.role === "toolResult") {
+                  toolName = m.toolName || "";
+                  let resText = (m.content || []).map((cc: any) => cc?.text ?? "").join("");
+                  if (resText.length > 500) resText = `${resText.substring(0, 500)}...`;
+                  contentText = `[Tool Result: ${toolName}]\n${resText}`;
                 } else {
                   contentText = String(m.content || "");
                 }
                 
-                if (m.role === "system") continue;
+                const storedRole: StoredMessage["role"] | null = m.role === "user"
+                  ? "user"
+                  : m.role === "assistant"
+                    ? "assistant"
+                    : m.role === "toolResult"
+                      ? "tool"
+                      : null;
+                if (!storedRole) continue;
 
                 realMsgs.push({
-                  role: m.role as any,
+                  role: storedRole,
                   content: contentText,
-                  toolName: toolName || undefined,
+                  toolName: (m.role === "toolResult" ? m.toolName : toolName) || undefined,
                   timestamp: m.timestamp || Date.now()
                 });
               }
@@ -315,9 +469,6 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
     history: session.messages,
     historyLength: session.messages.length,
   });
-
-  // 把用户消息追加到 llmContext 镜像
-  session.addUserMessage(message);
 
   try {
     const sdkImages = (images ?? []).map((img: any) => ({

@@ -232,6 +232,7 @@ export default function Home() {
             onLog={handleLog}
             onLogAppend={handleLogAppend}
             username={user?.username}
+            activeSessionId={activeSessionId}
             initialMessages={initialMessages}
             onSessionCreated={handleSessionCreated}
           />

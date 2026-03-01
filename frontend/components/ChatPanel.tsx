@@ -10,11 +10,12 @@ interface ChatPanelProps {
   onLog: (entry: LogEntry) => void;
   onLogAppend: (id: string, delta: string) => void;
   username?: string;
+  activeSessionId?: string | null;
   initialMessages?: ChatMessage[];
   onSessionCreated?: (sessionId: string) => void;
 }
 
-export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend, username, initialMessages, onSessionCreated }: ChatPanelProps) {
+export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend, username, activeSessionId, initialMessages, onSessionCreated }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages ?? []);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -54,12 +55,12 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
   useEffect(() => {
     // 切换会话时重置状态
     setMessages(initialMessages ?? []);
-    sessionIdRef.current = null;
+    sessionIdRef.current = activeSessionId ?? null;
     assistantTextRef.current = "";
     setAssistantText("");
     setIsStreaming(false);
     setToolStatus(null);
-  }, [initialMessages]);
+  }, [initialMessages, activeSessionId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -70,6 +71,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
 
     if (type === "session_ready") {
       sessionIdRef.current = event.sessionId;
+      if (event.sessionId) onSessionCreated?.(event.sessionId);
       return;
     }
 
@@ -240,8 +242,9 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
   async function ensureSession() {
     if (sessionIdRef.current || !llmConfig) return;
     const { sessionId } = await startSession(llmConfig, handleEvent, username);
-    sessionIdRef.current = sessionId;
-    onSessionCreated?.(sessionId);
+    if (sessionId) {
+      sessionIdRef.current = sessionId;
+    }
   }
 
   async function handleAbort() {
@@ -274,10 +277,20 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
     setIsStreaming(true);
     onLog({ id: mkId(), kind: "request", label: `sendMessage: "${text}"`, detail: JSON.stringify(llmConfig, null, 2), timestamp: Date.now() });
 
-    await ensureSession();
-    if (!sessionIdRef.current) return;
-
-    await sendMessage(sessionIdRef.current, text, handleEvent, imgs.length > 0 ? imgs : undefined);
+    try {
+      await ensureSession();
+      if (!sessionIdRef.current) throw new Error("会话创建失败");
+      await sendMessage(sessionIdRef.current, text, handleEvent, imgs.length > 0 ? imgs : undefined, username, llmConfig);
+    } catch (err: any) {
+      const errMsg = err?.message || "发送失败";
+      setIsStreaming(false);
+      setToolStatus(null);
+      onLog({ id: mkId(), kind: "error", label: errMsg, timestamp: Date.now() });
+      setMessages((prev) => [
+        ...prev,
+        { id: Date.now().toString(), role: "assistant", content: `**错误：** ${errMsg}`, timestamp: Date.now() },
+      ]);
+    }
   }
 
   async function handleImageFiles(files: FileList | null) {
