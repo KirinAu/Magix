@@ -128,8 +128,10 @@ export async function createAnimationAgent(
     description: "Returns the current animation code. Use this before str_replace to verify the exact content.",
     parameters: Type.Object({}),
     execute: async () => {
+      const readResult = currentCode ? `Current code:\n\`\`\`js\n${currentCode}\n\`\`\`` : "No code written yet.";
+      sendSSE(res, { type: "tool_result_debug", toolName: "read_code", result: currentCode ? `(${currentCode.split("\n").length} lines returned)` : "No code written yet." });
       return {
-        content: [{ type: "text" as const, text: currentCode ? `Current code:\n\`\`\`js\n${currentCode}\n\`\`\`` : "No code written yet." }],
+        content: [{ type: "text" as const, text: readResult }],
         details: { code: currentCode },
       };
     },
@@ -160,8 +162,10 @@ export async function createAnimationAgent(
         library: params.library,
         mode: "full",
       });
+      const resultText = `Code committed (${currentCode.split("\n").length} lines): ${params.description}. YOU MUST NOW call validate_code() immediately. Do not output any text before calling validate_code.`;
+      sendSSE(res, { type: "tool_result_debug", toolName: "commit_code", result: resultText });
       return {
-        content: [{ type: "text" as const, text: `Code committed (${currentCode.split("\n").length} lines): ${params.description}. YOU MUST NOW call validate_code() immediately. Do not output any text before calling validate_code.` }],
+        content: [{ type: "text" as const, text: resultText }],
         details: { ...params, code: currentCode },
       };
     },
@@ -183,8 +187,10 @@ export async function createAnimationAgent(
       if (count > 1) throw new Error(`old_str matches ${count} times. Provide a more unique string.`);
       currentCode = currentCode.replace(params.old_str, params.new_str);
       sendSSE(res, { type: "code_update", code: currentCode, library: currentLibrary, mode: "patch" });
+      const strReplaceResult = `Applied edit: ${params.description}. YOU MUST NOW call validate_code() immediately.`;
+      sendSSE(res, { type: "tool_result_debug", toolName: "str_replace", result: strReplaceResult });
       return {
-        content: [{ type: "text" as const, text: `Applied edit: ${params.description}. YOU MUST NOW call validate_code() immediately.` }],
+        content: [{ type: "text" as const, text: strReplaceResult }],
         details: { ...params, resultCode: currentCode },
       };
     },
@@ -209,8 +215,10 @@ export async function createAnimationAgent(
       if (result.warnings.length) lines.push(`warnings:\n${result.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
       if (result.ok && result.warnings.length === 0) lines.push("All checks passed. You may now summarize.");
       if (result.ok && result.warnings.length > 0) lines.push("ok=true but warnings exist. Fix the warnings with str_replace, then call validate_code again.");
+      const validateResultText = lines.join("\n");
+      sendSSE(res, { type: "tool_result_debug", toolName: "validate_code", result: validateResultText });
       return {
-        content: [{ type: "text" as const, text: lines.join("\n") }],
+        content: [{ type: "text" as const, text: validateResultText }],
         details: result,
       };
     },

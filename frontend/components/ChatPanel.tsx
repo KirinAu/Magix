@@ -89,6 +89,11 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
       return;
     }
 
+    if (type === "tool_result_debug") {
+      onLog({ id: mkId(), kind: "tool", label: `tool_result: ${event.toolName}`, detail: event.result, timestamp: Date.now() });
+      return;
+    }
+
     if (type === "request_debug") {
       const histLen = event.historyLength ?? 0;
       const detail = JSON.stringify({ userMessage: event.userMessage, history: event.history }, null, 2);

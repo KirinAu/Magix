@@ -200,6 +200,7 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
 
   // 拦截 SSE 写入，同时收集 assistant 消息和代码更新
   let assistantBuffer = "";
+  let currentToolName = "";
   const origRes = res;
 
   // 监听 code_update 和 agent_end 事件来更新 store
@@ -218,15 +219,23 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
           session.currentLibrary = evt.library ?? session.currentLibrary;
         }
 
+        if (evt.type === "tool_execution_start") {
+          currentToolName = evt.toolName ?? "";
+        }
+
+        if (evt.type === "tool_execution_end") {
+          const name = evt.toolName ?? currentToolName;
+          const label = name === "commit_code" ? "生成代码"
+            : name === "str_replace" ? "修改代码"
+            : name === "read_code" ? "查看代码"
+            : name === "validate_code" ? "检查代码" : name;
+          session.messages.push({ role: "tool", content: label, toolName: name, timestamp: Date.now() });
+          currentToolName = "";
+        }
+
         if (evt.type === "message_update") {
           const ae = evt.assistantMessageEvent;
           if (ae?.type === "text_delta") assistantBuffer += ae.delta;
-          if (ae?.type === "toolcall_end") {
-            const label = ae.toolName === "commit_code" ? "生成代码"
-              : ae.toolName === "str_replace" ? "修改代码"
-              : ae.toolName === "read_code" ? "查看代码" : ae.toolName;
-            session.messages.push({ role: "tool", content: label, toolName: ae.toolName, timestamp: Date.now() });
-          }
         }
 
         if (evt.type === "turn_end") {

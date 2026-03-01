@@ -31,6 +31,7 @@ export type AgentEventType =
   | "tool_execution_start"
   | "tool_execution_update"
   | "tool_execution_end"
+  | "tool_result_debug"
   | "request_debug"
   | "error";
 
