@@ -48,16 +48,17 @@ document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 ## Tools
 **IMPORTANT: Call only ONE tool at a time. Wait for the result before calling the next tool.**
 - **read_code()** — read current committed code before str_replace.
-- **commit_code(code, library, description)** — commit JavaScript code directly via the \`code\` parameter. Do NOT output a markdown code block separately; pass the full code as the \`code\` argument. \`library\` must be one of: \`gsap\`, \`anime\`, \`pixi\`, \`three\`, \`canvas\`. **You MUST call validate_code immediately after every commit_code. No exceptions.**
-- **str_replace(old_str, new_str, description)** — targeted edit on committed code. \`old_str\` must be unique and exact. **You MUST call validate_code immediately after every str_replace. No exceptions.**
-- **validate_code()** — runs static + browser runtime checks on committed code. Returns \`ok\`, \`errors\`, \`warnings\`. **You MUST call this after every commit_code or str_replace. You MUST NOT finish until validate_code returns ok=true.**
+- **commit_code(code, library, description)** — commits code AND automatically runs validation. Returns commit status + full validation results (ok, errors, warnings) in one step. \`library\` must be one of: \`gsap\`, \`anime\`, \`pixi\`, \`three\`, \`canvas\`.
+- **str_replace(old_str, new_str, description)** — targeted edit on committed code, then automatically validates. Returns edit status + validation results.
+- **validate_code()** — explicitly re-run validation on current code when needed.
+
 ## Handling user feedback
 **If the user reports a runtime error or visual problem (e.g. "X is not defined", "it doesn't work", "wrong shape"):**
 1. Call \`read_code()\` to get the current code.
-2. Fix the issue with \`str_replace\` or \`commit_code\`.
-3. Call \`validate_code()\`.
-4. Only after ok=true: write a reply summarizing what was fixed.
-**NEVER call validate_code as your first response to user feedback — always read_code first.**
+2. Fix the issue with \`str_replace\` or \`commit_code\` (validation runs automatically).
+3. If the result shows errors, fix again. If ok=true, write a reply.
+**NEVER skip reading the code before editing.**
+
 ## Workflow
 **IMPORTANT: Follow these steps in strict order.**
 
@@ -70,16 +71,13 @@ Output a short analysis in plain text:
 - **Motion**: Key motion beats — what moves, when, how fast?
 
 ### Step 2 — Commit Code
-Call \`commit_code(code, library, description)\` with the complete JavaScript code in the \`code\` parameter.
+Call \`commit_code(code, library, description)\`. Validation runs automatically and results are returned.
 
-### Step 3 — Validate
-Call \`validate_code()\`. If it returns errors, go to Step 4. If warnings only, call \`read_code()\` first, then fix with \`str_replace\`, then validate again.
+### Step 3 — Fix if needed
+If the result contains errors or warnings: call \`read_code()\`, fix with \`str_replace\` (auto-validates). Repeat until ok=true with no warnings. Max 5 rounds.
 
-### Step 4 — Fix
-Call \`read_code()\` to get the exact current code, then fix every issue with \`str_replace\`, then call \`validate_code()\` again. Repeat until \`ok=true\` and no warnings. Max 5 fix rounds.
-
-### Step 5 — Summarize (MANDATORY — DO NOT SKIP)
-**You MUST output a text reply after validate_code returns ok=true. Ending without a reply is forbidden.**
+### Step 4 — Summarize (MANDATORY — DO NOT SKIP)
+**You MUST output a text reply once ok=true and no warnings. Ending without a reply is forbidden.**
 Write: what was built, which library was used, and the recommended loop duration.
 
 ## Visual quality
@@ -160,13 +158,14 @@ export async function createAnimationAgent(
   const commitCodeTool: ToolDefinition<any> = {
     name: "commit_code",
     label: "Commit Draft Code",
-    description: "Commit JavaScript animation code. Pass the complete code directly in the `code` parameter.",
+    description: "Commit JavaScript animation code and automatically validate it. Returns commit status + validation results (ok, errors, warnings) in one step.",
     parameters: Type.Object({
       code: Type.String({ description: "The complete JavaScript animation code to commit" }),
-      library: Type.Union(
-        [Type.Literal("gsap"), Type.Literal("anime"), Type.Literal("pixi"), Type.Literal("three"), Type.Literal("canvas")],
-        { description: "Which animation library this code uses" }
-      ),
+      library: Type.Unsafe<"gsap" | "anime" | "pixi" | "three" | "canvas">({
+        type: "string",
+        enum: ["gsap", "anime", "pixi", "three", "canvas"],
+        description: "Which animation library this code uses",
+      }),
       description: Type.String({ description: "Brief description of this committed code" }),
     }),
     execute: async (_toolCallId, params) => {
@@ -182,13 +181,24 @@ export async function createAnimationAgent(
         library: params.library,
         mode: "full",
       });
-      const resultText = `Code committed (${currentCode.split("\n").length} lines): ${params.description}. YOU MUST NOW call validate_code() immediately. Do not output any text before calling validate_code.`;
+
+      // Auto-validate
+      const validation = await validateCode(currentCode, currentLibrary);
+      const parts: string[] = [`Code committed (${currentCode.split("\n").length} lines): ${params.description}.`];
+      parts.push(`\nValidation — ok: ${validation.ok}`);
+      if (validation.errors.length) parts.push(`errors:\n${validation.errors.map((e: string) => `  - ${e}`).join("\n")}`);
+      if (validation.warnings.length) parts.push(`warnings:\n${validation.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
+      if (validation.ok && validation.warnings.length === 0) parts.push("All checks passed. YOU MUST NOW write a text reply to the user — describe what was built, the library used, and recommended loop duration. Do NOT call any more tools.");
+      if (validation.ok && validation.warnings.length > 0) parts.push("ok=true but warnings exist. Call read_code() then fix with str_replace.");
+      if (!validation.ok) parts.push("There are errors. Call read_code() then fix with str_replace.");
+      const resultText = parts.join("\n");
+
       sendSSE(res, { type: "tool_result_debug", toolName: "commit_code", result: resultText });
       llmContext.push({ role: "assistant", content: `[tool_call: commit_code]`, toolName: "commit_code", toolArgs: { library: params.library, description: params.description } });
       llmContext.push({ role: "tool", content: resultText, toolName: "commit_code" });
       return {
         content: [{ type: "text" as const, text: resultText }],
-        details: { ...params, code: currentCode },
+        details: { ...params, code: currentCode, validation },
       };
     },
   };
@@ -196,7 +206,7 @@ export async function createAnimationAgent(
   const strReplaceTool: ToolDefinition<any> = {
     name: "str_replace",
     label: "Edit Code",
-    description: "Replace an exact substring in the current code. Use for targeted edits.",
+    description: "Replace an exact substring in the current code, then automatically validate. Returns edit status + validation results.",
     parameters: Type.Object({
       old_str: Type.String({ description: "Exact string to find and replace (must be unique in the code)" }),
       new_str: Type.String({ description: "Replacement string" }),
@@ -209,13 +219,24 @@ export async function createAnimationAgent(
       if (count > 1) throw new Error(`old_str matches ${count} times. Provide a more unique string.`);
       currentCode = currentCode.replace(params.old_str, params.new_str);
       sendSSE(res, { type: "code_update", code: currentCode, library: currentLibrary, mode: "patch" });
-      const strReplaceResult = `Applied edit: ${params.description}. YOU MUST NOW call validate_code() immediately.`;
+
+      // Auto-validate
+      const validation = await validateCode(currentCode, currentLibrary);
+      const parts: string[] = [`Applied edit: ${params.description}.`];
+      parts.push(`\nValidation — ok: ${validation.ok}`);
+      if (validation.errors.length) parts.push(`errors:\n${validation.errors.map((e: string) => `  - ${e}`).join("\n")}`);
+      if (validation.warnings.length) parts.push(`warnings:\n${validation.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
+      if (validation.ok && validation.warnings.length === 0) parts.push("All checks passed. YOU MUST NOW write a text reply to the user — describe what was built, the library used, and recommended loop duration. Do NOT call any more tools.");
+      if (validation.ok && validation.warnings.length > 0) parts.push("ok=true but warnings exist. Call read_code() then fix with str_replace.");
+      if (!validation.ok) parts.push("There are errors. Call read_code() then fix with str_replace.");
+      const strReplaceResult = parts.join("\n");
+
       sendSSE(res, { type: "tool_result_debug", toolName: "str_replace", result: strReplaceResult });
       llmContext.push({ role: "assistant", content: `[tool_call: str_replace]`, toolName: "str_replace", toolArgs: { description: params.description } });
       llmContext.push({ role: "tool", content: strReplaceResult, toolName: "str_replace" });
       return {
         content: [{ type: "text" as const, text: strReplaceResult }],
-        details: { ...params, resultCode: currentCode },
+        details: { ...params, resultCode: currentCode, validation },
       };
     },
   };
