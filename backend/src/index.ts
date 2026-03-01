@@ -97,11 +97,15 @@ async function openOrCreateFrameworkSessionManager(sessionId: string, createIfMi
   const manager = SessionManager.create(process.cwd(), PI_SESSION_DIR);
   const generated = manager.getSessionFile?.();
   if (generated && generated !== sessionFile) {
-    if (fs.existsSync(sessionFile)) {
+    // SessionManager may not have flushed the generated file to disk yet.
+    // Always switch the active file path first; only touch files if they exist.
+    manager.setSessionFile?.(sessionFile);
+    if (fs.existsSync(generated) && fs.existsSync(sessionFile)) {
       try { fs.unlinkSync(generated); } catch {}
-    } else {
-      fs.renameSync(generated, sessionFile);
+    } else if (fs.existsSync(generated) && !fs.existsSync(sessionFile)) {
+      try { fs.renameSync(generated, sessionFile); } catch {}
     }
+  } else {
     manager.setSessionFile?.(sessionFile);
   }
   return manager;
