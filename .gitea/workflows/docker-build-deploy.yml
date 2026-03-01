@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: catthehacker/ubuntu:act-latest
-      options: --network gitea_gitea
+      options: --network host
     env:
       REGISTRY: ${{ vars.REGISTRY }}
       IMAGE_NAMESPACE: ${{ vars.IMAGE_NAMESPACE }}
@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Checkout repository
         run: |
-          git clone --depth=2 --branch "$GITHUB_REF_NAME" "http://oauth2:${{ github.token }}@172.20.0.4:3000/${GITHUB_REPOSITORY}.git" .
+          git clone --depth=2 --branch "$GITHUB_REF_NAME" "http://oauth2:${{ github.token }}@localhost:3000/${GITHUB_REPOSITORY}.git" .
 
       - name: Resolve registry config
         id: cfg
@@ -209,12 +209,12 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: catthehacker/ubuntu:act-latest
-      options: --network gitea_gitea
+      options: --network host
     needs: build-and-push
     steps:
       - name: Checkout repository
         run: |
-          git clone --depth=1 --branch "$GITHUB_REF_NAME" "http://oauth2:${{ github.token }}@172.20.0.4:3000/${GITHUB_REPOSITORY}.git" .
+          git clone --depth=1 --branch "$GITHUB_REF_NAME" "http://oauth2:${{ github.token }}@localhost:3000/${GITHUB_REPOSITORY}.git" .
 
       - name: Ensure deploy env exists
         env:
