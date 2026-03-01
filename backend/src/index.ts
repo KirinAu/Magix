@@ -24,6 +24,7 @@ import {
 interface Session {
   agent: any;
   setRes: (r: import("express").Response) => void;
+  addUserMessage: (msg: string) => void;
   username: string;
   messages: StoredMessage[];
   currentCode: string;
@@ -143,6 +144,7 @@ app.post("/api/chat/start", async (req, res) => {
   const memSession: Session = {
     agent: null as any,
     setRes: () => {},
+    addUserMessage: () => {},
     username: resolvedUsername,
     messages: [],
     currentCode: "",
@@ -150,9 +152,10 @@ app.post("/api/chat/start", async (req, res) => {
   };
   sessions.set(sessionId, memSession);
 
-  const { session, setRes } = await createAnimationAgent(config, res);
+  const { session, setRes, addUserMessage } = await createAnimationAgent(config, res);
   memSession.agent = session;
   memSession.setRes = setRes;
+  memSession.addUserMessage = addUserMessage;
 
   sendSSE(res, { type: "session_ready", sessionId });
   res.end();
@@ -266,6 +269,9 @@ app.post("/api/chat/:sessionId/message", async (req, res) => {
     history: session.messages,
     historyLength: session.messages.length,
   });
+
+  // 把用户消息追加到 llmContext 镜像
+  session.addUserMessage(message);
 
   try {
     const sdkImages = (images ?? []).map((img: any) => ({

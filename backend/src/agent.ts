@@ -114,13 +114,24 @@ function buildModel(config: LLMConfig): Model<any> {
   };
 }
 
+export interface LLMContextMessage {
+  role: "user" | "assistant" | "tool";
+  content: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
+}
+
 export async function createAnimationAgent(
   config: LLMConfig,
   initialRes: Response
-): Promise<{ session: any; setRes: (r: Response) => void }> {
+): Promise<{ session: any; setRes: (r: Response) => void; addUserMessage: (msg: string) => void }> {
   let currentCode = "";
   let currentLibrary = "gsap";
   let res = initialRes;
+
+  // Mirror of what the LLM actually receives each turn
+  const llmContext: LLMContextMessage[] = [];
+  let assistantTextBuffer = "";
 
   const readCodeTool: ToolDefinition<any> = {
     name: "read_code",
@@ -129,7 +140,9 @@ export async function createAnimationAgent(
     parameters: Type.Object({}),
     execute: async () => {
       const readResult = currentCode ? `Current code:\n\`\`\`js\n${currentCode}\n\`\`\`` : "No code written yet.";
-      sendSSE(res, { type: "tool_result_debug", toolName: "read_code", result: currentCode ? `(${currentCode.split("\n").length} lines returned)` : "No code written yet." });
+      const summary = currentCode ? `(${currentCode.split("\n").length} lines returned)` : "No code written yet.";
+      sendSSE(res, { type: "tool_result_debug", toolName: "read_code", result: summary });
+      llmContext.push({ role: "tool", content: readResult, toolName: "read_code" });
       return {
         content: [{ type: "text" as const, text: readResult }],
         details: { code: currentCode },
@@ -164,6 +177,8 @@ export async function createAnimationAgent(
       });
       const resultText = `Code committed (${currentCode.split("\n").length} lines): ${params.description}. YOU MUST NOW call validate_code() immediately. Do not output any text before calling validate_code.`;
       sendSSE(res, { type: "tool_result_debug", toolName: "commit_code", result: resultText });
+      llmContext.push({ role: "assistant", content: `[tool_call: commit_code]`, toolName: "commit_code", toolArgs: { library: params.library, description: params.description } });
+      llmContext.push({ role: "tool", content: resultText, toolName: "commit_code" });
       return {
         content: [{ type: "text" as const, text: resultText }],
         details: { ...params, code: currentCode },
@@ -189,6 +204,8 @@ export async function createAnimationAgent(
       sendSSE(res, { type: "code_update", code: currentCode, library: currentLibrary, mode: "patch" });
       const strReplaceResult = `Applied edit: ${params.description}. YOU MUST NOW call validate_code() immediately.`;
       sendSSE(res, { type: "tool_result_debug", toolName: "str_replace", result: strReplaceResult });
+      llmContext.push({ role: "assistant", content: `[tool_call: str_replace]`, toolName: "str_replace", toolArgs: { description: params.description } });
+      llmContext.push({ role: "tool", content: strReplaceResult, toolName: "str_replace" });
       return {
         content: [{ type: "text" as const, text: strReplaceResult }],
         details: { ...params, resultCode: currentCode },
@@ -217,6 +234,8 @@ export async function createAnimationAgent(
       if (result.ok && result.warnings.length > 0) lines.push("ok=true but warnings exist. Fix the warnings with str_replace, then call validate_code again.");
       const validateResultText = lines.join("\n");
       sendSSE(res, { type: "tool_result_debug", toolName: "validate_code", result: validateResultText });
+      llmContext.push({ role: "assistant", content: `[tool_call: validate_code]`, toolName: "validate_code" });
+      llmContext.push({ role: "tool", content: validateResultText, toolName: "validate_code" });
       return {
         content: [{ type: "text" as const, text: validateResultText }],
         details: result,
@@ -245,6 +264,22 @@ export async function createAnimationAgent(
   });
 
   session.subscribe((event: AgentSessionEvent) => {
+    if (event.type === "turn_start") {
+      // Emit current LLM context snapshot so debug panel shows full message history
+      sendSSE(res, { type: "context_debug", messages: [...llmContext] });
+    }
+
+    if (event.type === "message_update") {
+      const ae = (event as any).assistantMessageEvent;
+      if (ae?.type === "text_delta") assistantTextBuffer += ae.delta;
+    }
+
+    if (event.type === "turn_end") {
+      const text = assistantTextBuffer.trim();
+      if (text) llmContext.push({ role: "assistant", content: text });
+      assistantTextBuffer = "";
+    }
+
     if (event.type === "agent_end") {
       const lastMsg = (event as any).messages?.[(event as any).messages.length - 1] as any;
       if (lastMsg?.stopReason === "error") {
@@ -262,7 +297,7 @@ export async function createAnimationAgent(
     }
   });
 
-  return { session, setRes: (r: Response) => { res = r; } };
+  return { session, setRes: (r: Response) => { res = r; }, addUserMessage: (msg: string) => { llmContext.push({ role: "user", content: msg }); } };
 }
 
 export function sendSSE(res: Response, data: unknown): void {

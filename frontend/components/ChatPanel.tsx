@@ -89,6 +89,17 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
       return;
     }
 
+    if (type === "context_debug") {
+      const msgs: Array<{role: string; content: string; toolName?: string; toolArgs?: any}> = event.messages ?? [];
+      const summary = msgs.map((m, i) => {
+        const roleTag = m.role === "tool" ? `[tool/${m.toolName}]` : `[${m.role}]`;
+        const preview = m.content.length > 120 ? m.content.slice(0, 120) + "..." : m.content;
+        return `${i + 1}. ${roleTag} ${preview}`;
+      }).join("\n");
+      onLog({ id: mkId(), kind: "info", label: `context (${msgs.length} msgs) → LLM`, detail: summary || "(empty)", timestamp: Date.now() });
+      return;
+    }
+
     if (type === "tool_result_debug") {
       onLog({ id: mkId(), kind: "tool", label: `tool_result: ${event.toolName}`, detail: event.result, timestamp: Date.now() });
       return;

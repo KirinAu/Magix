@@ -32,6 +32,7 @@ export type AgentEventType =
   | "tool_execution_update"
   | "tool_execution_end"
   | "tool_result_debug"
+  | "context_debug"
   | "request_debug"
   | "error";
 
