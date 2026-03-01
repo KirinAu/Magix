@@ -53,9 +53,9 @@ document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 - **validate_code()** — runs static + browser runtime checks on committed code. Returns \`ok\`, \`errors\`, \`warnings\`. **You MUST call this after every commit_code or str_replace. You MUST NOT finish until validate_code returns ok=true.**
 ## Handling user feedback
 **If the user reports a runtime error or visual problem (e.g. "X is not defined", "it doesn't work", "wrong shape"):**
-1. Call `read_code()` to get the current code.
-2. Fix the issue with `str_replace` or `commit_code`.
-3. Call `validate_code()`.
+1. Call \`read_code()\` to get the current code.
+2. Fix the issue with \`str_replace\` or \`commit_code\`.
+3. Call \`validate_code()\`.
 4. Only after ok=true: write a reply summarizing what was fixed.
 **NEVER call validate_code as your first response to user feedback — always read_code first.**
 ## Workflow
