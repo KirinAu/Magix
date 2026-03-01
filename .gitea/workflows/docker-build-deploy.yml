@@ -28,17 +28,9 @@ jobs:
       registry: ${{ steps.cfg.outputs.registry }}
       namespace: ${{ steps.cfg.outputs.namespace }}
     steps:
-      - name: Debug network
-        run: |
-          echo "=== GITHUB_SERVER_URL ===" && echo "$GITHUB_SERVER_URL"
-          echo "=== curl localhost:3000 ===" && curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 || echo "FAILED"
-          echo "=== curl gitea-server:3000 ===" && curl -s -o /dev/null -w "%{http_code}" http://gitea-server:3000 || echo "FAILED"
-          echo "=== ip route ===" && ip route || true
-          echo "=== /etc/hosts ===" && cat /etc/hosts
-
       - name: Checkout repository
         run: |
-          git clone --depth=2 --branch "$GITHUB_REF_NAME" "http://oauth2:${{ github.token }}@localhost:3000/${GITHUB_REPOSITORY}.git" .
+          git clone --depth=2 --branch "$GITHUB_REF_NAME" "http://oauth2:${{ github.token }}@gitea.stellaflux.cn/${GITHUB_REPOSITORY}.git" .
 
       - name: Resolve registry config
         id: cfg
@@ -216,7 +208,7 @@ jobs:
     steps:
       - name: Checkout repository
         run: |
-          git clone --depth=1 --branch "$GITHUB_REF_NAME" "http://oauth2:${{ github.token }}@localhost:3000/${GITHUB_REPOSITORY}.git" .
+          git clone --depth=1 --branch "$GITHUB_REF_NAME" "http://oauth2:${{ github.token }}@gitea.stellaflux.cn/${GITHUB_REPOSITORY}.git" .
 
       - name: Ensure deploy env exists
         env:
