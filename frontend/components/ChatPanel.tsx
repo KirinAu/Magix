@@ -21,6 +21,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
   const [isStreaming, setIsStreaming] = useState(false);
   const [assistantText, setAssistantText] = useState("");
   const [toolStatus, setToolStatus] = useState<string | null>(null);
+  const [thinkingText, setThinkingText] = useState("");
 
   const sessionIdRef = useRef<string | null>(null);
   const assistantTextRef = useRef<string>("");
@@ -35,23 +36,6 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
 
   function mkId() { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 
-  function detectLibraryFromCode(code: string): string {
-    if (code.includes("THREE")) return "three";
-    if (code.includes("PIXI")) return "pixi";
-    if (code.includes("anime(") || code.includes("anime.")) return "anime";
-    return "gsap";
-  }
-
-  function extractLatestJsCodeBlock(text: string): string | null {
-    const re = /```(?:javascript|js)?\n([\s\S]*?)```/gi;
-    let match: RegExpExecArray | null = null;
-    let last: string | null = null;
-    while ((match = re.exec(text)) !== null) {
-      last = match[1];
-    }
-    return last ? last.trim() : null;
-  }
-
   useEffect(() => {
     // 切换会话时重置状态
     setMessages(initialMessages ?? []);
@@ -60,11 +44,12 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
     setAssistantText("");
     setIsStreaming(false);
     setToolStatus(null);
+    setThinkingText("");
   }, [initialMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, assistantText]);
+  }, [messages, assistantText, toolStatus, thinkingText]);
 
   function handleEvent(event: any) {
     const { type } = event;
@@ -88,6 +73,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
       ]);
       assistantTextRef.current = "";
       setAssistantText("");
+      setThinkingText("");
       return;
     }
 
@@ -118,6 +104,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
       setIsStreaming(true);
       setAssistantText("");
       setToolStatus(null);
+      setThinkingText("");
       assistantTextRef.current = "";
       thinkingLogIdRef.current = null;
       onLog({ id: mkId(), kind: "info", label: "agent_start", timestamp: Date.now() });
@@ -152,35 +139,27 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
         const id = mkId();
         thinkingLogIdRef.current = id;
         thinkingTextRef.current = "";
+        setThinkingText("");
         onLog({ id, kind: "thinking", label: "", timestamp: Date.now() });
       }
 
       if (ae.type === "thinking_delta") {
         thinkingTextRef.current += ae.delta;
+        setThinkingText(thinkingTextRef.current);
         if (thinkingLogIdRef.current) {
           onLogAppend(thinkingLogIdRef.current, ae.delta);
         }
       }
 
       if (ae.type === "thinking_end") {
-        const text = thinkingTextRef.current.trim();
-        if (text) {
-          setMessages((prev) => [
-            ...prev,
-            { id: mkId(), role: "thinking", content: text, timestamp: Date.now() },
-          ]);
-        }
         thinkingTextRef.current = "";
+        setThinkingText("");
         thinkingLogIdRef.current = null;
       }
 
       if (ae.type === "text_delta") {
         assistantTextRef.current += ae.delta;
         setAssistantText(assistantTextRef.current);
-        const partialCode = extractLatestJsCodeBlock(assistantTextRef.current);
-        if (partialCode) {
-          onCodeUpdate(partialCode, detectLibraryFromCode(partialCode));
-        }
       }
 
       if (ae.type === "toolcall_delta") {
@@ -220,6 +199,8 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
       const text = assistantTextRef.current.trim();
       assistantTextRef.current = "";
       setAssistantText("");
+      setThinkingText("");
+      setToolStatus(null);
       if (text) {
         setMessages((prev) => [
           ...prev,
@@ -242,6 +223,8 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
       // 兜底：turn_end 已经处理了，这里只负责收尾状态
       setIsStreaming(false);
       setAssistantText("");
+      setThinkingText("");
+      setToolStatus(null);
       assistantTextRef.current = "";
       onLog({ id: mkId(), kind: "info", label: "agent_end", timestamp: Date.now() });
       return;
@@ -261,6 +244,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
     await abortSession(sessionIdRef.current);
     setIsStreaming(false);
     setToolStatus(null);
+    setThinkingText("");
     const text = assistantTextRef.current.trim();
     assistantTextRef.current = "";
     setAssistantText("");
@@ -334,22 +318,22 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
         )}
 
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-center"}`}>
             {msg.role === "tool" ? (
-              <div className="flex items-center gap-2 rounded-xl px-3 py-1.5 bg-gray-50 border border-gray-100">
+              <div className="flex items-center gap-2 rounded-full px-3 py-1 text-xs text-gray-500 border border-gray-200 bg-gray-50">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                <span className="text-xs text-gray-400">{msg.content}</span>
+                <span>{msg.content}</span>
               </div>
             ) : msg.role === "thinking" ? (
-              <details className="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-2.5 bg-gray-50 border border-gray-100">
+              <details className="max-w-[90%] text-center text-xs text-gray-400">
                 <summary className="text-xs text-gray-400 cursor-pointer select-none">思考过程</summary>
                 <p className="mt-2 text-xs text-gray-400 whitespace-pre-wrap leading-relaxed">{msg.content}</p>
               </details>
             ) : (
-              <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
+              <div className={`max-w-[90%] text-sm ${
                 msg.role === "user"
-                  ? "bg-gray-900 text-white rounded-br-sm"
-                  : "bg-gray-100 text-gray-800 rounded-bl-sm prose prose-sm max-w-none"
+                  ? "text-gray-900 text-right"
+                  : "text-gray-800 text-center prose prose-sm max-w-none"
               }`}>
                 {msg.role === "user" ? (
                   <div className="space-y-2">
@@ -370,27 +354,29 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
           </div>
         ))}
 
-        {isStreaming && assistantText && (
-          <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm bg-gray-100 text-gray-800 prose prose-sm max-w-none">
+        {isStreaming && (assistantText || thinkingText || toolStatus) && (
+          <div className="flex justify-center">
+            <div className="max-w-[90%] text-sm text-center text-gray-700 prose prose-sm max-w-none">
+              {thinkingText && (
+                <p className="whitespace-pre-wrap text-xs text-gray-400 mb-2">
+                  <span className="font-medium">Thinking:</span> {thinkingText}
+                </p>
+              )}
+              {toolStatus && (
+                <p className="text-xs text-gray-500 mb-2 inline-flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-pulse" />
+                  {toolStatus}
+                </p>
+              )}
               <ReactMarkdown>{assistantText}</ReactMarkdown>
               <span className="inline-block w-1 h-3.5 bg-gray-400 ml-0.5 animate-pulse align-middle" />
             </div>
           </div>
         )}
 
-        {isStreaming && toolStatus && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm px-4 py-2.5 bg-gray-50 border border-gray-100">
-              <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-pulse" />
-              <span className="text-xs text-gray-500">{toolStatus}</span>
-            </div>
-          </div>
-        )}
-
-        {isStreaming && !assistantText && !toolStatus && (
-          <div className="flex justify-start">
-            <div className="rounded-2xl rounded-bl-sm px-4 py-3 bg-gray-100">
+        {isStreaming && !assistantText && !toolStatus && !thinkingText && (
+          <div className="flex justify-center">
+            <div className="px-4 py-3">
               <div className="flex gap-1 items-center">
                 {[0, 150, 300].map((delay) => (
                   <span

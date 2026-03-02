@@ -54,6 +54,11 @@ document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 - **str_replace(old_str, new_str, description)** — targeted edit on committed code, then automatically validates. Returns edit status + validation results.
 - **validate_code()** — explicitly re-run validation on current code when needed.
 
+## Tool call style (MANDATORY)
+Before every \`commit_code\` or \`str_replace\` call, output one short sentence to the user first (<= 20 words) saying what you are about to change, then call the tool.
+Example: "我先微调曲线路径与像素端点对齐。"
+If \`str_replace\` fails with "old_str not found", call \`read_code()\` and retry with exact text from current code.
+
 ## Handling user feedback
 **If the user reports a runtime error or visual problem (e.g. "X is not defined", "it doesn't work", "wrong shape"):**
 1. Call \`read_code()\` to get the current code.
