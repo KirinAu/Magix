@@ -9,7 +9,7 @@ import DebugPanel from "@/components/DebugPanel";
 import LoginModal from "@/components/LoginModal";
 import SessionSidebar from "@/components/SessionSidebar";
 import AssetLibrary from "@/components/AssetLibrary";
-import { loadSession, getVideoUrl, saveSessionCode } from "@/lib/api";
+import { loadSession, getVideoUrl, saveSessionCode, createSession } from "@/lib/api";
 import type { LLMConfig, RenderParams, LogEntry, ChatMessage, UserInfo, SessionInfo, RenderJob, Asset } from "@/lib/types";
 
 const DEFAULT_CODE = `// 在这里写你的动画代码，或者让 AI 帮你生成
@@ -87,8 +87,26 @@ export default function Home() {
 
   // 手动保存
   const handleManualSave = useCallback(async () => {
-    if (!user || !activeSessionId) return;
+    if (!user) return;
 
+    // 如果没有 sessionId，先创建一个新会话
+    if (!activeSessionId) {
+      setSaveStatus("saving");
+      try {
+        const newSession = await createSession(user.username, "手动保存的代码", code, library);
+        setActiveSessionId(newSession.sessionId);
+        setLastSavedCode(code);
+        setLastSavedLibrary(library);
+        setSaveStatus("saved");
+        setSidebarRefreshTick((t) => t + 1);
+      } catch (error) {
+        console.error("Manual save failed:", error);
+        setSaveStatus("unsaved");
+      }
+      return;
+    }
+
+    // 已有会话，直接保存
     setSaveStatus("saving");
     try {
       await saveSessionCode(user.username, activeSessionId, code, library);
@@ -270,7 +288,7 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-3">
-          {user && activeSessionId && (
+          {user && (code !== DEFAULT_CODE || library !== "gsap" || activeSessionId) && (
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5">
                 <div className={`w-1.5 h-1.5 rounded-full ${

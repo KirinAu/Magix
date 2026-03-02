@@ -39,6 +39,16 @@ export async function saveSessionCode(username: string, sessionId: string, code:
   if (!res.ok) throw new Error("Failed to save code");
 }
 
+export async function createSession(username: string, title: string, code: string, library: string): Promise<{ sessionId: string }> {
+  const res = await fetch(`${BACKEND}/api/users/${username}/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, code, library }),
+  });
+  if (!res.ok) throw new Error("Failed to create session");
+  return res.json();
+}
+
 export async function startSession(
   config: { provider: string; modelId: string; apiKey: string; baseUrl?: string },
   onEvent: (event: any) => void,
