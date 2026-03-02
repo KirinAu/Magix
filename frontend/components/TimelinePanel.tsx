@@ -15,10 +15,12 @@ import {
 
 interface TimelinePanelProps {
   username: string;
-  onClose: () => void;
+  onClose?: () => void;
   refreshTick?: number;
   incomingAsset?: Asset | null;
   onIncomingAssetConsumed?: () => void;
+  embedded?: boolean;
+  onOpenAssetLibrary?: () => void;
 }
 
 function formatDuration(sec: number): string {
@@ -38,6 +40,8 @@ export default function TimelinePanel({
   refreshTick,
   incomingAsset,
   onIncomingAssetConsumed,
+  embedded = false,
+  onOpenAssetLibrary,
 }: TimelinePanelProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -53,11 +57,19 @@ export default function TimelinePanel({
     const list = await listUserProjects(username);
     setProjects(list);
 
-    const targetId = selectProjectId ?? activeProjectId ?? list[0]?.projectId ?? null;
+    const preferredId = selectProjectId ?? activeProjectId;
+    const targetId = preferredId && list.some((p) => p.projectId === preferredId)
+      ? preferredId
+      : list[0]?.projectId ?? null;
     setActiveProjectId(targetId);
     if (targetId) {
       const detail = await loadProject(username, targetId);
-      setActiveProject(detail);
+      if (detail) {
+        setActiveProject(detail);
+      } else {
+        setActiveProjectId(null);
+        setActiveProject(null);
+      }
     } else {
       setActiveProject(null);
     }
@@ -87,6 +99,10 @@ export default function TimelinePanel({
   async function selectProject(projectId: string) {
     setActiveProjectId(projectId);
     const detail = await loadProject(username, projectId);
+    if (!detail) {
+      await refreshProjects();
+      return;
+    }
     setActiveProject(detail);
   }
 
@@ -236,14 +252,26 @@ export default function TimelinePanel({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-[1100px] max-h-[82vh] flex flex-col overflow-hidden">
+    <div className={embedded ? "h-full w-full flex flex-col bg-white rounded-2xl border border-gray-100 overflow-hidden" : "fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"}>
+      <div className={embedded ? "h-full w-full flex flex-col overflow-hidden" : "bg-white rounded-2xl shadow-2xl w-[1100px] max-h-[82vh] flex flex-col overflow-hidden"}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h2 className="text-base font-semibold text-gray-900">时间线</h2>
             <p className="text-xs text-gray-400 mt-0.5">新建短片项目、拼接素材并支持截取</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg transition-colors">✕</button>
+          <div className="flex items-center gap-2">
+            {embedded && (
+              <button
+                onClick={onOpenAssetLibrary}
+                className="rounded-xl bg-gray-900 text-white px-3 py-1.5 text-xs font-medium hover:bg-gray-700 transition-colors"
+              >
+                + 素材
+              </button>
+            )}
+            {!embedded && onClose && (
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg transition-colors">✕</button>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
