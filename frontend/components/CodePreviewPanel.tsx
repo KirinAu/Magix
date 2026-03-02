@@ -199,8 +199,41 @@ export default function CodePreviewPanel({
 
   return (
     <div className="h-full w-full rounded-2xl overflow-hidden border border-gray-100 flex flex-col">
-      <div className="flex items-center justify-center py-2.5 bg-white border-b border-gray-100 shrink-0">
-        <div className="flex bg-gray-100 rounded-full p-0.5 gap-0.5">
+      <div className="flex items-center justify-between px-3 py-2 bg-white border-b border-gray-100 shrink-0 gap-3">
+        <div className="min-w-0 flex-1 flex items-center gap-2 text-xs">
+          {tab === "preview" ? (
+            <>
+              <button
+                onClick={handleTimerStartPause}
+                className="rounded-full px-3 py-1 bg-gray-900 text-white"
+              >
+                {timerRunning ? "暂停" : "开始"}
+              </button>
+              <button
+                onClick={handleLoopMark}
+                disabled={!timerRunning}
+                className="rounded-full px-3 py-1 border border-gray-300 disabled:opacity-40"
+              >
+                打点
+              </button>
+              <button
+                onClick={handleTimerReset}
+                className="rounded-full px-3 py-1 border border-gray-300"
+              >
+                重置
+              </button>
+              <span className="text-gray-600 whitespace-nowrap">计时: {fmt(elapsedMs)}s</span>
+              <span className="text-gray-500 whitespace-nowrap">打点: {loopMarks.length}</span>
+              {avgLoopMs !== null && (
+                <span className="text-gray-900 font-medium whitespace-nowrap">平均 Loop: {fmt(avgLoopMs)}s</span>
+              )}
+            </>
+          ) : (
+            <span className="text-gray-400">预览页可用计时与打点</span>
+          )}
+        </div>
+
+        <div className="flex bg-gray-100 rounded-full p-0.5 gap-0.5 shrink-0">
           <button
             onClick={() => onTabChange("code")}
             className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${tab === "code" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
@@ -247,34 +280,7 @@ export default function CodePreviewPanel({
         )}
 
         {tab === "preview" && (
-          <div className="h-full w-full bg-black flex flex-col overflow-hidden">
-            <div className="shrink-0 px-3 py-2 bg-white/90 border-b border-gray-200 flex items-center gap-2 text-xs">
-              <button
-                onClick={handleTimerStartPause}
-                className="rounded-full px-3 py-1 bg-gray-900 text-white"
-              >
-                {timerRunning ? "暂停" : "开始"}
-              </button>
-              <button
-                onClick={handleLoopMark}
-                disabled={!timerRunning}
-                className="rounded-full px-3 py-1 border border-gray-300 disabled:opacity-40"
-              >
-                打点
-              </button>
-              <button
-                onClick={handleTimerReset}
-                className="rounded-full px-3 py-1 border border-gray-300"
-              >
-                重置
-              </button>
-              <span className="text-gray-600">计时: {fmt(elapsedMs)}s</span>
-              <span className="text-gray-500">打点: {loopMarks.length}</span>
-              {avgLoopMs !== null && (
-                <span className="text-gray-900 font-medium">平均 Loop: {fmt(avgLoopMs)}s</span>
-              )}
-            </div>
-
+          <div className="h-full w-full bg-black flex overflow-hidden">
             <div ref={containerRef} className="flex-1 w-full flex items-center justify-center overflow-hidden">
               <div style={{ width, height, transform: `scale(${scale})`, transformOrigin: "center center", flexShrink: 0 }}>
                 <iframe
