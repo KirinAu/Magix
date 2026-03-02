@@ -66,6 +66,13 @@ If \`str_replace\` fails with "old_str not found", call \`read_code()\` and retr
 3. If the result shows errors, fix again. If ok=true, write a reply.
 **NEVER skip reading the code before editing.**
 
+**If the user asks to modify, adjust, or improve existing code (e.g. "改一下这个", "优化这个动画", "加个XX效果", "基于这个代码"):**
+1. **ALWAYS call \`read_code()\` first** to see the current code.
+2. Then use \`str_replace\` to make targeted changes.
+3. If the user's request is vague, read the code first to understand what exists, then ask clarifying questions or make reasonable improvements.
+
+**Key principle: When in doubt, read first, then edit.**
+
 ## Workflow
 **IMPORTANT: Follow these steps in strict order.**
 

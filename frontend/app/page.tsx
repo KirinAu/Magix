@@ -99,6 +99,9 @@ export default function Home() {
         setLastSavedLibrary(library);
         setSaveStatus("saved");
         setSidebarRefreshTick((t) => t + 1);
+
+        // 设置初始消息为空，这样就是一个干净的新会话
+        setInitialMessages([]);
       } catch (error) {
         console.error("Manual save failed:", error);
         setSaveStatus("unsaved");
@@ -113,6 +116,7 @@ export default function Home() {
       setLastSavedCode(code);
       setLastSavedLibrary(library);
       setSaveStatus("saved");
+      setSidebarRefreshTick((t) => t + 1);
     } catch (error) {
       console.error("Manual save failed:", error);
       setSaveStatus("unsaved");
