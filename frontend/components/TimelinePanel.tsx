@@ -114,37 +114,36 @@ export default function TimelinePanel({
     const video = videoRef.current;
     const targetTime = currentClip.clip.trimStart + currentClip.offsetInClip;
 
-    // 暂停视频以避免切换时的闪烁
-    const wasPlaying = !video.paused;
-    video.pause();
-
     // 设置新的视频源和时间
     const newSrc = `/api/outputs/${currentClip.clip.filePath}`;
     if (video.src !== window.location.origin + newSrc) {
       video.src = newSrc;
       video.load();
-    }
 
-    // 等待视频可以播放后设置时间和播放状态
-    const handleCanPlay = () => {
-      video.currentTime = targetTime;
-      if (wasPlaying && isPlaying) {
-        video.play().catch(() => {});
-      }
-      video.removeEventListener('canplay', handleCanPlay);
-    };
-
-    if (video.readyState >= 2) {
-      // 视频已经加载，直接设置
-      video.currentTime = targetTime;
-      if (isPlaying) {
-        video.play().catch(() => {});
-      }
-    } else {
-      // 等待视频加载
+      // 等待视频加载后设置时间
+      const handleCanPlay = () => {
+        video.currentTime = targetTime;
+        video.removeEventListener('canplay', handleCanPlay);
+      };
       video.addEventListener('canplay', handleCanPlay);
+    } else {
+      // 同一个视频源，直接设置时间
+      if (Math.abs(video.currentTime - targetTime) > 0.1) {
+        video.currentTime = targetTime;
+      }
     }
-  }, [currentClip, isPlaying]);
+  }, [currentClip]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (isPlaying) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [isPlaying]);
 
   useEffect(() => {
     const video = videoRef.current;
