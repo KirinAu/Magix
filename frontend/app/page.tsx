@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import CodePreviewPanel from "@/components/CodePreviewPanel";
 import ChatPanel from "@/components/ChatPanel";
 import RenderPanel from "@/components/RenderPanel";
@@ -9,7 +9,7 @@ import DebugPanel from "@/components/DebugPanel";
 import LoginModal from "@/components/LoginModal";
 import SessionSidebar from "@/components/SessionSidebar";
 import AssetLibrary from "@/components/AssetLibrary";
-import { loadSession, getVideoUrl } from "@/lib/api";
+import { loadSession, getVideoUrl, saveSessionCode } from "@/lib/api";
 import type { LLMConfig, RenderParams, LogEntry, ChatMessage, UserInfo, SessionInfo, RenderJob, Asset } from "@/lib/types";
 
 const DEFAULT_CODE = `// 在这里写你的动画代码，或者让 AI 帮你生成
@@ -62,7 +62,69 @@ export default function Home() {
   const [showAssetLibrary, setShowAssetLibrary] = useState(false);
   const [assetLibraryRefreshTick, setAssetLibraryRefreshTick] = useState(0);
 
-  // 从 localStorage 恢复登录状态
+  // 代码保存状态
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved">("saved");
+  const [lastSavedCode, setLastSavedCode] = useState(DEFAULT_CODE);
+  const [lastSavedLibrary, setLastSavedLibrary] = useState("gsap");
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 自动保存逻辑
+  const autoSave = useCallback(async () => {
+    if (!user || !activeSessionId || saveStatus === "saving") return;
+    if (code === lastSavedCode && library === lastSavedLibrary) return;
+
+    setSaveStatus("saving");
+    try {
+      await saveSessionCode(user.username, activeSessionId, code, library);
+      setLastSavedCode(code);
+      setLastSavedLibrary(library);
+      setSaveStatus("saved");
+    } catch (error) {
+      console.error("Auto-save failed:", error);
+      setSaveStatus("unsaved");
+    }
+  }, [user, activeSessionId, code, library, lastSavedCode, lastSavedLibrary, saveStatus]);
+
+  // 手动保存
+  const handleManualSave = useCallback(async () => {
+    if (!user || !activeSessionId) return;
+
+    setSaveStatus("saving");
+    try {
+      await saveSessionCode(user.username, activeSessionId, code, library);
+      setLastSavedCode(code);
+      setLastSavedLibrary(library);
+      setSaveStatus("saved");
+    } catch (error) {
+      console.error("Manual save failed:", error);
+      setSaveStatus("unsaved");
+    }
+  }, [user, activeSessionId, code, library]);
+
+  // 监听代码变化，设置未保存状态并启动自动保存
+  useEffect(() => {
+    if (!activeSessionId) return;
+
+    if (code !== lastSavedCode || library !== lastSavedLibrary) {
+      setSaveStatus("unsaved");
+
+      // 清除之前的定时器
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+
+      // 3秒后自动保存
+      saveTimeoutRef.current = setTimeout(() => {
+        autoSave();
+      }, 3000);
+    }
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [code, library, lastSavedCode, lastSavedLibrary, activeSessionId, autoSave]);
   useEffect(() => {
     const saved = localStorage.getItem("me_user");
     if (saved) {
@@ -111,6 +173,9 @@ export default function Home() {
     setInitialMessages(detail.messages as ChatMessage[]);
     setCode(detail.code || DEFAULT_CODE);
     setLibrary(detail.library || "gsap");
+    setLastSavedCode(detail.code || DEFAULT_CODE);
+    setLastSavedLibrary(detail.library || "gsap");
+    setSaveStatus("saved");
     setVideoUrl(detail.videoPath ? getVideoUrl(detail.videoPath) : null);
     setTab("code");
     setLogs([]);
@@ -122,6 +187,9 @@ export default function Home() {
     setActiveSessionId(null);
     setInitialMessages([]);
     resetWorkspace();
+    setLastSavedCode(DEFAULT_CODE);
+    setLastSavedLibrary("gsap");
+    setSaveStatus("saved");
   }
 
   // agent 创建了新 session 后，更新 activeSessionId 并刷新侧边栏
@@ -190,6 +258,28 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-3">
+          {user && activeSessionId && (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                <div className={`w-1.5 h-1.5 rounded-full ${
+                  saveStatus === "saved" ? "bg-green-500" :
+                  saveStatus === "saving" ? "bg-yellow-500" : "bg-red-500"
+                }`} />
+                <span className="text-xs text-gray-500">
+                  {saveStatus === "saved" ? "已保存" :
+                   saveStatus === "saving" ? "保存中..." : "未保存"}
+                </span>
+              </div>
+              {saveStatus === "unsaved" && (
+                <button
+                  onClick={handleManualSave}
+                  className="rounded-lg bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 text-xs font-medium transition-colors"
+                >
+                  保存
+                </button>
+              )}
+            </div>
+          )}
           {user && (
             <>
               <button

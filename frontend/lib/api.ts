@@ -30,6 +30,15 @@ export async function deleteUserSession(username: string, sessionId: string): Pr
   await fetch(`${BACKEND}/api/users/${username}/sessions/${sessionId}`, { method: "DELETE" });
 }
 
+export async function saveSessionCode(username: string, sessionId: string, code: string, library: string): Promise<void> {
+  const res = await fetch(`${BACKEND}/api/users/${username}/sessions/${sessionId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, library }),
+  });
+  if (!res.ok) throw new Error("Failed to save code");
+}
+
 export async function startSession(
   config: { provider: string; modelId: string; apiKey: string; baseUrl?: string },
   onEvent: (event: any) => void,
