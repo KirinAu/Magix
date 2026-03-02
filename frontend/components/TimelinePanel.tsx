@@ -130,7 +130,7 @@ export default function TimelinePanel({
     if (!video) return;
 
     function handleTimeUpdate() {
-      if (!currentClip || !isPlaying) return;
+      if (!video || !currentClip || !isPlaying) return;
 
       const clipEndTime = currentClip.clip.trimEnd > 0
         ? currentClip.clip.trimEnd
