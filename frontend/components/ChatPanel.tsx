@@ -33,6 +33,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [pendingImages, setPendingImages] = useState<Array<{ type: "base64"; mediaType: string; data: string; preview: string }>>([]);
+  const mdClass = "prose prose-sm max-w-none text-gray-800 [&_*]:break-words";
 
   function mkId() { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
 
@@ -318,22 +319,24 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
         )}
 
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-center"}`}>
+          <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} w-full`}>
             {msg.role === "tool" ? (
               <div className="flex items-center gap-2 rounded-full px-3 py-1 text-xs text-gray-500 border border-gray-200 bg-gray-50">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
                 <span>{msg.content}</span>
               </div>
             ) : msg.role === "thinking" ? (
-              <details className="max-w-[90%] text-center text-xs text-gray-400">
+              <details className="max-w-[92%] text-xs text-gray-500">
                 <summary className="text-xs text-gray-400 cursor-pointer select-none">思考过程</summary>
-                <p className="mt-2 text-xs text-gray-400 whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                <div className={`mt-2 text-left text-justify ${mdClass}`}>
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
               </details>
             ) : (
-              <div className={`max-w-[90%] text-sm ${
+              <div className={`max-w-[92%] text-sm ${
                 msg.role === "user"
                   ? "text-gray-900 text-right"
-                  : "text-gray-800 text-center prose prose-sm max-w-none"
+                  : `text-gray-800 text-left text-justify ${mdClass}`
               }`}>
                 {msg.role === "user" ? (
                   <div className="space-y-2">
@@ -355,12 +358,12 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
         ))}
 
         {isStreaming && (assistantText || thinkingText || toolStatus) && (
-          <div className="flex justify-center">
-            <div className="max-w-[90%] text-sm text-center text-gray-700 prose prose-sm max-w-none">
+          <div className="flex justify-start w-full">
+            <div className={`max-w-[92%] text-sm text-left text-justify text-gray-700 ${mdClass}`}>
               {thinkingText && (
-                <p className="whitespace-pre-wrap text-xs text-gray-400 mb-2">
+                <div className="whitespace-pre-wrap text-xs text-gray-400 mb-2">
                   <span className="font-medium">Thinking:</span> {thinkingText}
-                </p>
+                </div>
               )}
               {toolStatus && (
                 <p className="text-xs text-gray-500 mb-2 inline-flex items-center gap-2">
