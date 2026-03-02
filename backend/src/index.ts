@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createAnimationAgent, sendSSE, type LLMConfig } from "./agent";
 
 import { renderFrames } from "./renderer";
-import { encodeToMp4, cleanupFrames } from "./encoder";
+import { encodeToMp4, cleanupFrames, getVideoDuration, concatVideos } from "./encoder";
 import {
   ensureUser,
   createSession,
@@ -18,6 +18,20 @@ import {
   updateRenderJob,
   getRenderJob,
   getSessionRenderJob,
+  createAsset,
+  getAsset,
+  listAssets,
+  deleteAsset,
+  renameAsset,
+  createProject,
+  getProject,
+  listProjects,
+  updateProject,
+  deleteProject,
+  addClip,
+  listClips,
+  removeClip,
+  replaceClips,
   type ChatMessage as StoredMessage,
 } from "./store";
 
@@ -566,6 +580,20 @@ app.post("/api/render", async (req, res) => {
     if (username && sessionId) {
       updateRenderJob(jobId, { status: "done", outputFile: `${jobId}.mp4` });
       updateSession(username, sessionId, { videoPath: `${jobId}.mp4` });
+
+      // 自动加入素材库
+      try {
+        const dur = await getVideoDuration(outputFile);
+        createAsset(jobId, username, {
+          name: `渲染 ${new Date().toLocaleString("zh-CN")}`,
+          filePath: `${jobId}.mp4`,
+          duration: dur,
+          width, height, fps,
+          sourceSessionId: sessionId,
+        });
+      } catch (e) {
+        console.error("Auto-create asset failed:", e);
+      }
     }
   } catch (err: any) {
     const isStopped = abortController.signal.aborted || err?.message === "Render stopped";
@@ -651,6 +679,178 @@ app.get("/api/render/:jobId/download", (req, res) => {
 
   const filePath = path.join(OUTPUT_DIR, job.outputFile);
   res.download(filePath, "animation.mp4");
+});
+
+// ─── 素材库 ───────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/users/:username/assets
+ */
+app.get("/api/users/:username/assets", (req, res) => {
+  const assets = listAssets(req.params.username);
+  res.json(assets);
+});
+
+/**
+ * DELETE /api/users/:username/assets/:assetId
+ */
+app.delete("/api/users/:username/assets/:assetId", (req, res) => {
+  const ok = deleteAsset(req.params.assetId, req.params.username);
+  if (!ok) { res.status(404).json({ error: "Asset not found" }); return; }
+  res.json({ ok: true });
+});
+
+/**
+ * PATCH /api/users/:username/assets/:assetId
+ * Body: { name }
+ */
+app.patch("/api/users/:username/assets/:assetId", (req, res) => {
+  const { name } = req.body;
+  if (!name) { res.status(400).json({ error: "name is required" }); return; }
+  const ok = renameAsset(req.params.assetId, req.params.username, name);
+  if (!ok) { res.status(404).json({ error: "Asset not found" }); return; }
+  res.json({ ok: true });
+});
+
+/**
+ * GET /api/assets/:assetId/stream
+ * 预览/播放素材视频
+ */
+app.get("/api/assets/:assetId/stream", (req, res) => {
+  const asset = getAsset(req.params.assetId);
+  if (!asset) { res.status(404).json({ error: "Asset not found" }); return; }
+  // 基本鉴权：通过 query 参数 u 校验 username
+  const requestUser = req.query.u as string | undefined;
+  if (requestUser && requestUser !== asset.username) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  const filePath = path.join(OUTPUT_DIR, asset.filePath);
+  if (!fs.existsSync(filePath)) { res.status(404).json({ error: "File not found" }); return; }
+  res.sendFile(filePath);
+});
+
+// ─── 短片项目 & 时间线 ────────────────────────────────────────────────────────
+
+/**
+ * GET /api/users/:username/projects
+ */
+app.get("/api/users/:username/projects", (req, res) => {
+  const projects = listProjects(req.params.username);
+  res.json(projects);
+});
+
+/**
+ * POST /api/users/:username/projects
+ * Body: { name }
+ */
+app.post("/api/users/:username/projects", (req, res) => {
+  const { name } = req.body;
+  const projectId = uuidv4();
+  const project = createProject(projectId, req.params.username, name || "未命名短片");
+  res.json(project);
+});
+
+/**
+ * GET /api/users/:username/projects/:projectId
+ * 返回项目详情 + clips
+ */
+app.get("/api/users/:username/projects/:projectId", (req, res) => {
+  const project = getProject(req.params.username, req.params.projectId);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  const clips = listClips(req.params.projectId);
+  res.json({ ...project, clips });
+});
+
+/**
+ * PATCH /api/users/:username/projects/:projectId
+ * Body: { name?, status? }
+ */
+app.patch("/api/users/:username/projects/:projectId", (req, res) => {
+  const ok = updateProject(req.params.username, req.params.projectId, req.body);
+  if (!ok) { res.status(404).json({ error: "Project not found" }); return; }
+  res.json({ ok: true });
+});
+
+/**
+ * DELETE /api/users/:username/projects/:projectId
+ */
+app.delete("/api/users/:username/projects/:projectId", (req, res) => {
+  const ok = deleteProject(req.params.username, req.params.projectId);
+  if (!ok) { res.status(404).json({ error: "Project not found" }); return; }
+  res.json({ ok: true });
+});
+
+/**
+ * PUT /api/users/:username/projects/:projectId/clips
+ * 整体替换时间线（前端拖拽排序后整体提交）
+ * Body: { clips: Array<{ clipId, assetId, position, trimStart, trimEnd }> }
+ */
+app.put("/api/users/:username/projects/:projectId/clips", (req, res) => {
+  const project = getProject(req.params.username, req.params.projectId);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  const { clips } = req.body;
+  if (!Array.isArray(clips)) { res.status(400).json({ error: "clips array required" }); return; }
+  replaceClips(req.params.projectId, clips);
+  updateProject(req.params.username, req.params.projectId, {});
+  const result = listClips(req.params.projectId);
+  res.json(result);
+});
+
+/**
+ * POST /api/users/:username/projects/:projectId/export
+ * 导出/拼接时间线为最终视频
+ */
+app.post("/api/users/:username/projects/:projectId/export", async (req, res) => {
+  const project = getProject(req.params.username, req.params.projectId);
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const clips = listClips(req.params.projectId);
+  if (clips.length === 0) { res.status(400).json({ error: "No clips in timeline" }); return; }
+
+  const outputFile = `project_${req.params.projectId}.mp4`;
+  const outputPath = path.join(OUTPUT_DIR, outputFile);
+
+  updateProject(req.params.username, req.params.projectId, { status: "exporting" });
+  res.json({ status: "exporting" });
+
+  try {
+    const clipInputs = clips.map((c) => ({
+      filePath: path.join(OUTPUT_DIR, c.filePath!),
+      trimStart: c.trimStart,
+      trimEnd: c.trimEnd > 0 ? c.trimEnd : (c.assetDuration ?? 0),
+    }));
+
+    await concatVideos({ clips: clipInputs, outputPath });
+
+    updateProject(req.params.username, req.params.projectId, { status: "done", outputFile });
+
+    // 把导出结果也加入素材库
+    try {
+      const dur = await getVideoDuration(outputPath);
+      const asset = createAsset(uuidv4(), req.params.username, {
+        name: `短片: ${project.name}`,
+        filePath: outputFile,
+        duration: dur,
+        width: clips[0].width ?? 1280,
+        height: clips[0].height ?? 720,
+        fps: clips[0].fps ?? 30,
+      });
+    } catch {}
+  } catch (err: any) {
+    updateProject(req.params.username, req.params.projectId, { status: "error" });
+    console.error("Export failed:", err);
+  }
+});
+
+/**
+ * GET /api/users/:username/projects/:projectId/download
+ */
+app.get("/api/users/:username/projects/:projectId/download", (req, res) => {
+  const project = getProject(req.params.username, req.params.projectId);
+  if (!project || !project.outputFile) { res.status(404).json({ error: "File not ready" }); return; }
+  const filePath = path.join(OUTPUT_DIR, project.outputFile);
+  if (!fs.existsSync(filePath)) { res.status(404).json({ error: "File not found" }); return; }
+  res.download(filePath, `${project.name}.mp4`);
 });
 
 app.listen(PORT, () => {

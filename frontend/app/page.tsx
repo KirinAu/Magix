@@ -8,8 +8,10 @@ import SettingsModal from "@/components/SettingsModal";
 import DebugPanel from "@/components/DebugPanel";
 import LoginModal from "@/components/LoginModal";
 import SessionSidebar from "@/components/SessionSidebar";
+import AssetLibrary from "@/components/AssetLibrary";
+import TimelinePanel from "@/components/TimelinePanel";
 import { loadSession, getVideoUrl } from "@/lib/api";
-import type { LLMConfig, RenderParams, LogEntry, ChatMessage, UserInfo, SessionInfo, RenderJob } from "@/lib/types";
+import type { LLMConfig, RenderParams, LogEntry, ChatMessage, UserInfo, SessionInfo, RenderJob, Asset } from "@/lib/types";
 
 const DEFAULT_CODE = `// 在这里写你的动画代码，或者让 AI 帮你生成
 // 支持 GSAP 和 Anime.js
@@ -58,6 +60,11 @@ export default function Home() {
   });
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [activeRenderJob, setActiveRenderJob] = useState<RenderJob | null>(null);
+  const [showAssetLibrary, setShowAssetLibrary] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
+  const [assetLibraryRefreshTick, setAssetLibraryRefreshTick] = useState(0);
+  const [timelineRefreshTick, setTimelineRefreshTick] = useState(0);
+  const [incomingAsset, setIncomingAsset] = useState<Asset | null>(null);
 
   // 从 localStorage 恢复登录状态
   useEffect(() => {
@@ -170,6 +177,7 @@ export default function Home() {
     setVideoUrl(getVideoUrl(outputFile));
     setTab("video");
     setSidebarRefreshTick((t) => t + 1);
+    setAssetLibraryRefreshTick((t) => t + 1);
     setActiveRenderJob({ jobId, status: "done", progress: 0, total: 0, outputFile });
   }
 
@@ -186,6 +194,22 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-3">
+          {user && (
+            <>
+              <button
+                onClick={() => setShowAssetLibrary(true)}
+                className="rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-2 text-xs font-medium transition-colors"
+              >
+                素材库
+              </button>
+              <button
+                onClick={() => setShowTimeline(true)}
+                className="rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-2 text-xs font-medium transition-colors"
+              >
+                时间线
+              </button>
+            </>
+          )}
           {user && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500">{user.username}</span>
@@ -272,6 +296,34 @@ export default function Home() {
           config={llmConfig}
           onSave={handleSaveConfig}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {showAssetLibrary && user && (
+        <AssetLibrary
+          username={user.username}
+          onClose={() => setShowAssetLibrary(false)}
+          refreshTick={assetLibraryRefreshTick}
+          onSelectAsset={(asset) => {
+            setIncomingAsset(asset);
+            setShowTimeline(true);
+          }}
+          onAssetDeleted={() => {
+            setTimelineRefreshTick((t) => t + 1);
+          }}
+        />
+      )}
+
+      {showTimeline && user && (
+        <TimelinePanel
+          username={user.username}
+          onClose={() => setShowTimeline(false)}
+          refreshTick={timelineRefreshTick}
+          incomingAsset={incomingAsset}
+          onIncomingAssetConsumed={() => {
+            setIncomingAsset(null);
+            setTimelineRefreshTick((t) => t + 1);
+          }}
         />
       )}
     </div>

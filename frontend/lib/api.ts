@@ -1,4 +1,4 @@
-import type { UserInfo, SessionInfo, SessionDetail } from "./types";
+import type { UserInfo, SessionInfo, SessionDetail, Asset, Project, ProjectDetail, Clip } from "./types";
 
 const BACKEND = "";
 
@@ -203,4 +203,83 @@ export async function stopRenderJob(jobId: string): Promise<void> {
 // 直接用静态路由访问已保存的视频文件（服务重启后仍有效）
 export function getVideoUrl(filename: string): string {
   return `${BACKEND}/api/outputs/${filename}`;
+}
+
+// ─── 素材库 ───────────────────────────────────────────────────────────────────
+
+export async function listUserAssets(username: string): Promise<Asset[]> {
+  const res = await fetch(`${BACKEND}/api/users/${username}/assets`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function deleteUserAsset(username: string, assetId: string): Promise<void> {
+  await fetch(`${BACKEND}/api/users/${username}/assets/${assetId}`, { method: "DELETE" });
+}
+
+export async function renameUserAsset(username: string, assetId: string, name: string): Promise<void> {
+  await fetch(`${BACKEND}/api/users/${username}/assets/${assetId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function getAssetStreamUrl(assetId: string): string {
+  return `${BACKEND}/api/assets/${assetId}/stream`;
+}
+
+// ─── 短片项目 & 时间线 ────────────────────────────────────────────────────────
+
+export async function listUserProjects(username: string): Promise<Project[]> {
+  const res = await fetch(`${BACKEND}/api/users/${username}/projects`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function createUserProject(username: string, name: string): Promise<Project> {
+  const res = await fetch(`${BACKEND}/api/users/${username}/projects`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  return res.json();
+}
+
+export async function loadProject(username: string, projectId: string): Promise<ProjectDetail | null> {
+  const res = await fetch(`${BACKEND}/api/users/${username}/projects/${projectId}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function updateUserProject(username: string, projectId: string, patch: Partial<Project>): Promise<void> {
+  await fetch(`${BACKEND}/api/users/${username}/projects/${projectId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteUserProject(username: string, projectId: string): Promise<void> {
+  await fetch(`${BACKEND}/api/users/${username}/projects/${projectId}`, { method: "DELETE" });
+}
+
+export async function saveProjectClips(username: string, projectId: string, clips: Array<{ clipId: string; assetId: string; position: number; trimStart: number; trimEnd: number }>): Promise<Clip[]> {
+  const res = await fetch(`${BACKEND}/api/users/${username}/projects/${projectId}/clips`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clips }),
+  });
+  return res.json();
+}
+
+export async function exportProject(username: string, projectId: string): Promise<{ status: string }> {
+  const res = await fetch(`${BACKEND}/api/users/${username}/projects/${projectId}/export`, {
+    method: "POST",
+  });
+  return res.json();
+}
+
+export function getProjectDownloadUrl(username: string, projectId: string): string {
+  return `${BACKEND}/api/users/${username}/projects/${projectId}/download`;
 }

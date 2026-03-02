@@ -96,3 +96,49 @@ export interface RenderJob {
   outputFile?: string;
   error?: string;
 }
+
+// ─── 素材库 & 时间线 ──────────────────────────────────────────────────────────
+
+export interface Asset {
+  assetId: string;
+  username: string;
+  name: string;
+  filePath: string;
+  duration: number;
+  width: number;
+  height: number;
+  fps: number;
+  thumbnail?: string;
+  sourceSessionId?: string;
+  createdAt: number;
+}
+
+export interface Project {
+  projectId: string;
+  username: string;
+  name: string;
+  status: "draft" | "exporting" | "done" | "error";
+  outputFile?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface Clip {
+  clipId: string;
+  projectId: string;
+  assetId: string;
+  position: number;
+  trimStart: number;
+  trimEnd: number;
+  filePath?: string;
+  assetName?: string;
+  assetDuration?: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  createdAt: number;
+}
+
+export interface ProjectDetail extends Project {
+  clips: Clip[];
+}
