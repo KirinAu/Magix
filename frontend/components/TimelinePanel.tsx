@@ -113,21 +113,65 @@ export default function TimelinePanel({
     if (!videoRef.current || !currentClip) return;
     const video = videoRef.current;
     const targetTime = currentClip.clip.trimStart + currentClip.offsetInClip;
+
     if (Math.abs(video.currentTime - targetTime) > 0.1) {
       video.currentTime = targetTime;
     }
-  }, [currentClip]);
+
+    if (isPlaying) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [currentClip, isPlaying]);
 
   useEffect(() => {
-    if (!isPlaying || !videoRef.current) return;
-    const interval = setInterval(() => {
-      setCurrentTime((t) => {
-        const next = t + 0.033;
-        return next >= totalDuration ? 0 : next;
-      });
-    }, 33);
-    return () => clearInterval(interval);
-  }, [isPlaying, totalDuration]);
+    const video = videoRef.current;
+    if (!video) return;
+
+    function handleTimeUpdate() {
+      if (!currentClip || !isPlaying) return;
+
+      const clipEndTime = currentClip.clip.trimEnd > 0
+        ? currentClip.clip.trimEnd
+        : (currentClip.clip.assetDuration ?? 0);
+
+      if (video.currentTime >= clipEndTime) {
+        let accTime = 0;
+        let foundNext = false;
+
+        for (let i = 0; i < (activeProject?.clips.length ?? 0); i++) {
+          const clip = activeProject!.clips[i];
+          const duration = (clip.trimEnd > 0 ? clip.trimEnd : (clip.assetDuration ?? 0)) - clip.trimStart;
+
+          if (clip.clipId === currentClip.clip.clipId && i < activeProject!.clips.length - 1) {
+            setCurrentTime(accTime + duration);
+            foundNext = true;
+            break;
+          }
+          accTime += duration;
+        }
+
+        if (!foundNext) {
+          setCurrentTime(0);
+          setIsPlaying(false);
+        }
+      } else {
+        let accTime = 0;
+        for (const clip of activeProject?.clips ?? []) {
+          if (clip.clipId === currentClip.clip.clipId) {
+            setCurrentTime(accTime + (video.currentTime - currentClip.clip.trimStart));
+            break;
+          }
+          const duration = (clip.trimEnd > 0 ? clip.trimEnd : (clip.assetDuration ?? 0)) - clip.trimStart;
+          accTime += duration;
+        }
+      }
+    }
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    return () => video.removeEventListener('timeupdate', handleTimeUpdate);
+  }, [currentClip, isPlaying, activeProject]);
 
   async function handleCreateProject() {
     const name = newProjectName.trim() || `短片 ${new Date().toLocaleDateString("zh-CN")}`;
@@ -433,7 +477,6 @@ export default function TimelinePanel({
                           ref={videoRef}
                           src={`/api/outputs/${currentClip.clip.filePath}`}
                           className="max-h-full max-w-full"
-                          muted
                           playsInline
                         />
                       ) : (
