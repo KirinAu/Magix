@@ -96,6 +96,11 @@ export default function CodePreviewPanel({
 }: CodePreviewPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [loopMarks, setLoopMarks] = useState<number[]>([]);
+  const timerStartRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
   const { width, height } = renderParams;
 
   useEffect(() => {
@@ -111,6 +116,25 @@ export default function CodePreviewPanel({
     if (containerRef.current) ro.observe(containerRef.current);
     return () => ro.disconnect();
   }, [tab, width, height]);
+
+  useEffect(() => {
+    if (!timerRunning) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      return;
+    }
+    const tick = () => {
+      if (timerStartRef.current) {
+        setElapsedMs(Date.now() - timerStartRef.current);
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+  }, [timerRunning]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -142,6 +166,36 @@ export default function CodePreviewPanel({
   const previewHtml = tab === "preview"
     ? buildPreviewHtml(value, library, width, height)
     : "";
+
+  function fmt(ms: number): string {
+    return (ms / 1000).toFixed(2);
+  }
+
+  function handleTimerStartPause() {
+    if (!timerRunning) {
+      timerStartRef.current = Date.now() - elapsedMs;
+      setTimerRunning(true);
+      return;
+    }
+    setTimerRunning(false);
+  }
+
+  function handleLoopMark() {
+    if (!timerRunning) return;
+    setLoopMarks((prev) => [...prev, elapsedMs]);
+  }
+
+  function handleTimerReset() {
+    setTimerRunning(false);
+    timerStartRef.current = null;
+    setElapsedMs(0);
+    setLoopMarks([]);
+  }
+
+  const loopIntervals = loopMarks.slice(1).map((m, i) => m - loopMarks[i]);
+  const avgLoopMs = loopIntervals.length
+    ? Math.round(loopIntervals.reduce((a, b) => a + b, 0) / loopIntervals.length)
+    : null;
 
   return (
     <div className="h-full w-full rounded-2xl overflow-hidden border border-gray-100 flex flex-col">
@@ -193,14 +247,43 @@ export default function CodePreviewPanel({
         )}
 
         {tab === "preview" && (
-          <div ref={containerRef} className="h-full w-full bg-black flex items-center justify-center overflow-hidden">
-            <div style={{ width, height, transform: `scale(${scale})`, transformOrigin: "center center", flexShrink: 0 }}>
-              <iframe
-                key={previewHtml}
-                srcDoc={previewHtml}
-                sandbox="allow-scripts"
-                style={{ width, height, border: "none", display: "block" }}
-              />
+          <div className="h-full w-full bg-black flex flex-col overflow-hidden">
+            <div className="shrink-0 px-3 py-2 bg-white/90 border-b border-gray-200 flex items-center gap-2 text-xs">
+              <button
+                onClick={handleTimerStartPause}
+                className="rounded-full px-3 py-1 bg-gray-900 text-white"
+              >
+                {timerRunning ? "暂停" : "开始"}
+              </button>
+              <button
+                onClick={handleLoopMark}
+                disabled={!timerRunning}
+                className="rounded-full px-3 py-1 border border-gray-300 disabled:opacity-40"
+              >
+                打点
+              </button>
+              <button
+                onClick={handleTimerReset}
+                className="rounded-full px-3 py-1 border border-gray-300"
+              >
+                重置
+              </button>
+              <span className="text-gray-600">计时: {fmt(elapsedMs)}s</span>
+              <span className="text-gray-500">打点: {loopMarks.length}</span>
+              {avgLoopMs !== null && (
+                <span className="text-gray-900 font-medium">平均 Loop: {fmt(avgLoopMs)}s</span>
+              )}
+            </div>
+
+            <div ref={containerRef} className="flex-1 w-full flex items-center justify-center overflow-hidden">
+              <div style={{ width, height, transform: `scale(${scale})`, transformOrigin: "center center", flexShrink: 0 }}>
+                <iframe
+                  key={previewHtml}
+                  srcDoc={previewHtml}
+                  sandbox="allow-scripts"
+                  style={{ width, height, border: "none", display: "block" }}
+                />
+              </div>
             </div>
           </div>
         )}
