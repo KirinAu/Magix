@@ -116,13 +116,19 @@ export default function TimelinePanel({
 
     // 设置新的视频源和时间
     const newSrc = `/api/outputs/${currentClip.clip.filePath}`;
-    if (video.src !== window.location.origin + newSrc) {
+    const fullSrc = window.location.origin + newSrc;
+
+    if (video.src !== fullSrc) {
+      // 切换到新视频
       video.src = newSrc;
       video.load();
 
-      // 等待视频加载后设置时间
+      // 等待视频加载后设置时间并播放
       const handleCanPlay = () => {
         video.currentTime = targetTime;
+        if (isPlaying) {
+          video.play().catch(() => {});
+        }
         video.removeEventListener('canplay', handleCanPlay);
       };
       video.addEventListener('canplay', handleCanPlay);
@@ -131,19 +137,11 @@ export default function TimelinePanel({
       if (Math.abs(video.currentTime - targetTime) > 0.1) {
         video.currentTime = targetTime;
       }
+      if (isPlaying && video.paused) {
+        video.play().catch(() => {});
+      }
     }
-  }, [currentClip]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (isPlaying) {
-      video.play().catch(() => {});
-    } else {
-      video.pause();
-    }
-  }, [isPlaying]);
+  }, [currentClip, isPlaying]);
 
   useEffect(() => {
     const video = videoRef.current;
