@@ -36,10 +36,33 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
   const mdClass = "prose prose-sm max-w-none text-gray-800 [&_*]:break-words";
 
   function mkId() { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
+  function toolLabel(name?: string, fallback?: string) {
+    if (name === "commit_code") return "生成代码";
+    if (name === "str_replace") return "修改代码";
+    if (name === "read_code") return "查看代码";
+    if (name === "validate_code") return "检查代码";
+    return fallback || "工具执行";
+  }
+
+  function sanitizeAssistantContent(text: string) {
+    return text
+      .replace(/\[Tool Call:[^\]]+\]\n?Args:[^\n]*(\n)?/g, "")
+      .replace(/\[Tool Result:[^\]]+\]\n?[^\n]*(\n)?/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
 
   useEffect(() => {
     // 切换会话时重置状态
-    setMessages(initialMessages ?? []);
+    setMessages((initialMessages ?? []).map((m) => {
+      if (m.role === "assistant") {
+        return { ...m, content: sanitizeAssistantContent(m.content) };
+      }
+      if (m.role === "tool") {
+        return { ...m, content: toolLabel(m.toolName, m.content) };
+      }
+      return m;
+    }));
     sessionIdRef.current = activeSessionId ?? null;
     assistantTextRef.current = "";
     setAssistantText("");
@@ -323,7 +346,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
             {msg.role === "tool" ? (
               <div className="flex items-center gap-2 rounded-full px-3 py-1 text-xs text-gray-500 border border-gray-200 bg-gray-50">
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                <span>{msg.content}</span>
+                <span>{toolLabel(msg.toolName, msg.content)}</span>
               </div>
             ) : msg.role === "thinking" ? (
               <details className="max-w-[92%] text-xs text-gray-500">
