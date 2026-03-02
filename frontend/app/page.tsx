@@ -125,8 +125,7 @@ export default function Home() {
 
   // 监听代码变化，设置未保存状态并启动自动保存
   useEffect(() => {
-    if (!activeSessionId) return;
-
+    // 检查代码是否有变化
     if (code !== lastSavedCode || library !== lastSavedLibrary) {
       setSaveStatus("unsaved");
 
@@ -135,10 +134,12 @@ export default function Home() {
         clearTimeout(saveTimeoutRef.current);
       }
 
-      // 3秒后自动保存
-      saveTimeoutRef.current = setTimeout(() => {
-        autoSave();
-      }, 3000);
+      // 只有在已有会话时才启动自动保存
+      if (activeSessionId) {
+        saveTimeoutRef.current = setTimeout(() => {
+          autoSave();
+        }, 3000);
+      }
     }
 
     return () => {
