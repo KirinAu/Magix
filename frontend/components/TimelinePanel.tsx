@@ -386,32 +386,32 @@ export default function TimelinePanel({
             </div>
           </div>
 
-          <div className=”flex-1 flex flex-col overflow-hidden”>
+          <div className="flex-1 flex flex-col overflow-hidden">
             {!activeProject ? (
-              <div className=”h-full flex items-center justify-center text-sm text-gray-400”>
+              <div className="h-full flex items-center justify-center text-sm text-gray-400">
                 先创建或选择一个短片项目
               </div>
             ) : (
-              <div className=”flex-1 flex flex-col overflow-hidden”>
-                <div className=”px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0”>
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
                   <div>
-                    <p className=”text-sm font-medium text-gray-900”>{activeProject.name}</p>
-                    <p className=”text-xs text-gray-400 mt-0.5”>
+                    <p className="text-sm font-medium text-gray-900">{activeProject.name}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
                       共 {activeProject.clips.length} 段 · 总时长 {formatDuration(totalDuration)}
                     </p>
                   </div>
-                  <div className=”flex items-center gap-2”>
+                  <div className="flex items-center gap-2">
                     <button
                       onClick={handleExport}
                       disabled={activeProject.clips.length === 0 || exporting}
-                      className=”rounded-xl bg-gray-900 text-white px-4 py-2 text-xs font-medium disabled:opacity-40 hover:bg-gray-700 transition-colors”
+                      className="rounded-xl bg-gray-900 text-white px-4 py-2 text-xs font-medium disabled:opacity-40 hover:bg-gray-700 transition-colors"
                     >
-                      {exporting ? “导出中...” : “导出短片”}
+                      {exporting ? "导出中..." : "导出短片"}
                     </button>
-                    {activeProject.status === “done” && (
+                    {activeProject.status === "done" && (
                       <a
                         href={getProjectDownloadUrl(username, activeProject.projectId)}
-                        className=”rounded-xl border border-gray-200 text-gray-700 px-4 py-2 text-xs font-medium hover:bg-gray-50 transition-colors”
+                        className="rounded-xl border border-gray-200 text-gray-700 px-4 py-2 text-xs font-medium hover:bg-gray-50 transition-colors"
                       >
                         下载
                       </a>
@@ -420,49 +420,49 @@ export default function TimelinePanel({
                 </div>
 
                 {activeProject.clips.length === 0 ? (
-                  <div className=”flex-1 flex items-center justify-center”>
-                    <div className=”rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-400”>
-                      当前时间线为空。点击”+ 素材”添加视频片段。
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-400">
+                      当前时间线为空。点击"+ 素材"添加视频片段。
                     </div>
                   </div>
                 ) : (
-                  <div className=”flex-1 flex flex-col overflow-hidden p-4 gap-4”>
-                    <div className=”bg-black rounded-xl overflow-hidden flex items-center justify-center” style={{ height: “320px” }}>
+                  <div className="flex-1 flex flex-col overflow-hidden p-4 gap-4">
+                    <div className="bg-black rounded-xl overflow-hidden flex items-center justify-center" style={{ height: "320px" }}>
                       {currentClip ? (
                         <video
                           ref={videoRef}
                           src={`/api/outputs/${currentClip.clip.filePath}`}
-                          className=”max-h-full max-w-full”
+                          className="max-h-full max-w-full"
                           muted
                           playsInline
                         />
                       ) : (
-                        <div className=”text-gray-500 text-sm”>预览区域</div>
+                        <div className="text-gray-500 text-sm">预览区域</div>
                       )}
                     </div>
 
-                    <div className=”flex items-center justify-center gap-3”>
+                    <div className="flex items-center justify-center gap-3">
                       <button
                         onClick={() => setCurrentTime(0)}
-                        className=”rounded-lg bg-gray-100 hover:bg-gray-200 px-3 py-2 text-xs transition-colors”
+                        className="rounded-lg bg-gray-100 hover:bg-gray-200 px-3 py-2 text-xs transition-colors"
                       >
                         ⏮ 开始
                       </button>
                       <button
                         onClick={() => setIsPlaying(!isPlaying)}
-                        className=”rounded-lg bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 text-sm font-medium transition-colors”
+                        className="rounded-lg bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 text-sm font-medium transition-colors"
                       >
-                        {isPlaying ? “⏸ 暂停” : “▶ 播放”}
+                        {isPlaying ? "⏸ 暂停" : "▶ 播放"}
                       </button>
                       <button
                         onClick={() => setCurrentTime(totalDuration)}
-                        className=”rounded-lg bg-gray-100 hover:bg-gray-200 px-3 py-2 text-xs transition-colors”
+                        className="rounded-lg bg-gray-100 hover:bg-gray-200 px-3 py-2 text-xs transition-colors"
                       >
                         ⏭ 结束
                       </button>
                     </div>
 
-                    <div className=”flex-1 overflow-hidden”>
+                    <div className="flex-1 overflow-hidden">
                       <VideoTimeline
                         clips={activeProject.clips}
                         currentTime={currentTime}
