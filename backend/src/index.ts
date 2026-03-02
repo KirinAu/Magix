@@ -245,6 +245,27 @@ app.delete("/api/users/:username/sessions/:sessionId", (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * PUT /api/users/:username/sessions/:sessionId
+ * 更新会话（保存代码）
+ */
+app.put("/api/users/:username/sessions/:sessionId", (req, res) => {
+  const { username, sessionId } = req.params;
+  const { code, library, title } = req.body;
+
+  const session = getSession(username, sessionId);
+  if (!session) { res.status(404).json({ error: "Session not found" }); return; }
+
+  updateSession(username, sessionId, {
+    title: title ?? session.title,
+    code: code ?? session.code,
+    library: library ?? session.library,
+    videoPath: session.videoPath,
+  });
+
+  res.json({ ok: true });
+});
+
 // ─── Agent 会话管理 ───────────────────────────────────────────────────────────
 
 const sessions = new Map<string, Session>();
