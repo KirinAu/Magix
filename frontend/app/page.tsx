@@ -193,9 +193,21 @@ export default function Home() {
   }
 
   // agent 创建了新 session 后，更新 activeSessionId 并刷新侧边栏
-  function handleSessionCreated(sessionId: string) {
+  async function handleSessionCreated(sessionId: string) {
     setActiveSessionId(sessionId);
     setSidebarRefreshTick((t) => t + 1);
+
+    // 如果用户在新会话中已经编辑了代码，立即保存
+    if (user && (code !== DEFAULT_CODE || library !== "gsap")) {
+      try {
+        await saveSessionCode(user.username, sessionId, code, library);
+        setLastSavedCode(code);
+        setLastSavedLibrary(library);
+        setSaveStatus("saved");
+      } catch (error) {
+        console.error("Failed to save code on session creation:", error);
+      }
+    }
   }
 
   const handleLog = useCallback((entry: LogEntry) => {
