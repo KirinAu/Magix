@@ -114,14 +114,35 @@ export default function TimelinePanel({
     const video = videoRef.current;
     const targetTime = currentClip.clip.trimStart + currentClip.offsetInClip;
 
-    if (Math.abs(video.currentTime - targetTime) > 0.1) {
-      video.currentTime = targetTime;
+    // 暂停视频以避免切换时的闪烁
+    const wasPlaying = !video.paused;
+    video.pause();
+
+    // 设置新的视频源和时间
+    const newSrc = `/api/outputs/${currentClip.clip.filePath}`;
+    if (video.src !== window.location.origin + newSrc) {
+      video.src = newSrc;
+      video.load();
     }
 
-    if (isPlaying) {
-      video.play().catch(() => {});
+    // 等待视频可以播放后设置时间和播放状态
+    const handleCanPlay = () => {
+      video.currentTime = targetTime;
+      if (wasPlaying && isPlaying) {
+        video.play().catch(() => {});
+      }
+      video.removeEventListener('canplay', handleCanPlay);
+    };
+
+    if (video.readyState >= 2) {
+      // 视频已经加载，直接设置
+      video.currentTime = targetTime;
+      if (isPlaying) {
+        video.play().catch(() => {});
+      }
     } else {
-      video.pause();
+      // 等待视频加载
+      video.addEventListener('canplay', handleCanPlay);
     }
   }, [currentClip, isPlaying]);
 
@@ -137,26 +158,31 @@ export default function TimelinePanel({
         : (currentClip.clip.assetDuration ?? 0);
 
       if (video.currentTime >= clipEndTime) {
+        // 找到下一个片段
         let accTime = 0;
-        let foundNext = false;
+        let nextClipIndex = -1;
 
         for (let i = 0; i < (activeProject?.clips.length ?? 0); i++) {
           const clip = activeProject!.clips[i];
           const duration = (clip.trimEnd > 0 ? clip.trimEnd : (clip.assetDuration ?? 0)) - clip.trimStart;
 
-          if (clip.clipId === currentClip.clip.clipId && i < activeProject!.clips.length - 1) {
-            setCurrentTime(accTime + duration);
-            foundNext = true;
+          if (clip.clipId === currentClip.clip.clipId) {
+            nextClipIndex = i + 1;
             break;
           }
           accTime += duration;
         }
 
-        if (!foundNext) {
+        if (nextClipIndex < (activeProject?.clips.length ?? 0)) {
+          // 有下一个片段，切换到下一个片段的开始
+          setCurrentTime(accTime + (clipEndTime - currentClip.clip.trimStart));
+        } else {
+          // 没有下一个片段，停止播放并回到开始
           setCurrentTime(0);
           setIsPlaying(false);
         }
       } else {
+        // 正常播放，更新时间轴位置
         let accTime = 0;
         for (const clip of activeProject?.clips ?? []) {
           if (clip.clipId === currentClip.clip.clipId) {
