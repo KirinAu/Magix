@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Asset, Clip, Project, ProjectDetail } from "@/lib/types";
 import {
   createUserProject,
@@ -34,6 +34,10 @@ function generateId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
+import VideoTimeline from "./VideoTimeline";
+
+const PIXELS_PER_SECOND = 60; // 时间轴缩放比例
+
 export default function TimelinePanel({
   username,
   onClose,
@@ -52,6 +56,9 @@ export default function TimelinePanel({
   const [exporting, setExporting] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editProjectName, setEditProjectName] = useState("");
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   async function refreshProjects(selectProjectId?: string) {
     const list = await listUserProjects(username);
@@ -88,6 +95,39 @@ export default function TimelinePanel({
       return sum + Math.max(0, end - c.trimStart);
     }, 0);
   }, [activeProject]);
+
+  const currentClip = useMemo(() => {
+    if (!activeProject?.clips?.length) return null;
+    let accTime = 0;
+    for (const clip of activeProject.clips) {
+      const duration = (clip.trimEnd > 0 ? clip.trimEnd : (clip.assetDuration ?? 0)) - clip.trimStart;
+      if (currentTime >= accTime && currentTime < accTime + duration) {
+        return { clip, offsetInClip: currentTime - accTime };
+      }
+      accTime += duration;
+    }
+    return null;
+  }, [activeProject, currentTime]);
+
+  useEffect(() => {
+    if (!videoRef.current || !currentClip) return;
+    const video = videoRef.current;
+    const targetTime = currentClip.clip.trimStart + currentClip.offsetInClip;
+    if (Math.abs(video.currentTime - targetTime) > 0.1) {
+      video.currentTime = targetTime;
+    }
+  }, [currentClip]);
+
+  useEffect(() => {
+    if (!isPlaying || !videoRef.current) return;
+    const interval = setInterval(() => {
+      setCurrentTime((t) => {
+        const next = t + 0.033;
+        return next >= totalDuration ? 0 : next;
+      });
+    }, 33);
+    return () => clearInterval(interval);
+  }, [isPlaying, totalDuration]);
 
   async function handleCreateProject() {
     const name = newProjectName.trim() || `短片 ${new Date().toLocaleDateString("zh-CN")}`;
@@ -147,6 +187,12 @@ export default function TimelinePanel({
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleClipsChange(newClips: Clip[]) {
+    if (!activeProject) return;
+    setActiveProject({ ...activeProject, clips: newClips });
+    persistClips(newClips);
   }
 
   async function ensureProjectForIncomingAsset(): Promise<string> {
@@ -340,32 +386,32 @@ export default function TimelinePanel({
             </div>
           </div>
 
-          <div className="flex-1 p-4 overflow-y-auto">
+          <div className=”flex-1 flex flex-col overflow-hidden”>
             {!activeProject ? (
-              <div className="h-full flex items-center justify-center text-sm text-gray-400">
+              <div className=”h-full flex items-center justify-center text-sm text-gray-400”>
                 先创建或选择一个短片项目
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-gray-100 p-3 flex items-center justify-between">
+              <div className=”flex-1 flex flex-col overflow-hidden”>
+                <div className=”px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0”>
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{activeProject.name}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
+                    <p className=”text-sm font-medium text-gray-900”>{activeProject.name}</p>
+                    <p className=”text-xs text-gray-400 mt-0.5”>
                       共 {activeProject.clips.length} 段 · 总时长 {formatDuration(totalDuration)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className=”flex items-center gap-2”>
                     <button
                       onClick={handleExport}
                       disabled={activeProject.clips.length === 0 || exporting}
-                      className="rounded-xl bg-gray-900 text-white px-4 py-2 text-xs font-medium disabled:opacity-40 hover:bg-gray-700 transition-colors"
+                      className=”rounded-xl bg-gray-900 text-white px-4 py-2 text-xs font-medium disabled:opacity-40 hover:bg-gray-700 transition-colors”
                     >
-                      {exporting ? "导出中..." : "导出短片"}
+                      {exporting ? “导出中...” : “导出短片”}
                     </button>
-                    {activeProject.status === "done" && (
+                    {activeProject.status === “done” && (
                       <a
                         href={getProjectDownloadUrl(username, activeProject.projectId)}
-                        className="rounded-xl border border-gray-200 text-gray-700 px-4 py-2 text-xs font-medium hover:bg-gray-50 transition-colors"
+                        className=”rounded-xl border border-gray-200 text-gray-700 px-4 py-2 text-xs font-medium hover:bg-gray-50 transition-colors”
                       >
                         下载
                       </a>
@@ -374,77 +420,57 @@ export default function TimelinePanel({
                 </div>
 
                 {activeProject.clips.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-400">
-                    当前时间线为空。先在“素材库”里把视频添加到时间线。
+                  <div className=”flex-1 flex items-center justify-center”>
+                    <div className=”rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-400”>
+                      当前时间线为空。点击”+ 素材”添加视频片段。
+                    </div>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {activeProject.clips.map((clip, idx) => (
-                      <div key={clip.clipId} className="rounded-xl border border-gray-100 p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium text-gray-900 truncate">
-                              {idx + 1}. {clip.assetName || "未命名素材"}
-                            </p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">
-                              原始时长 {formatDuration(clip.assetDuration ?? 0)}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => handleMove(idx, -1)}
-                              disabled={idx === 0 || saving}
-                              className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] text-gray-700 disabled:opacity-40"
-                            >
-                              上移
-                            </button>
-                            <button
-                              onClick={() => handleMove(idx, 1)}
-                              disabled={idx === activeProject.clips.length - 1 || saving}
-                              className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] text-gray-700 disabled:opacity-40"
-                            >
-                              下移
-                            </button>
-                            <button
-                              onClick={() => handleDeleteClip(clip.clipId)}
-                              disabled={saving}
-                              className="rounded-lg border border-red-200 px-2 py-1 text-[11px] text-red-500 disabled:opacity-40"
-                            >
-                              删除
-                            </button>
-                          </div>
-                        </div>
+                  <div className=”flex-1 flex flex-col overflow-hidden p-4 gap-4”>
+                    <div className=”bg-black rounded-xl overflow-hidden flex items-center justify-center” style={{ height: “320px” }}>
+                      {currentClip ? (
+                        <video
+                          ref={videoRef}
+                          src={`/api/outputs/${currentClip.clip.filePath}`}
+                          className=”max-h-full max-w-full”
+                          muted
+                          playsInline
+                        />
+                      ) : (
+                        <div className=”text-gray-500 text-sm”>预览区域</div>
+                      )}
+                    </div>
 
-                        <div className="mt-3 grid grid-cols-2 gap-3">
-                          <label className="block">
-                            <span className="text-[11px] text-gray-400">截取开始（秒）</span>
-                            <input
-                              type="number"
-                              min={0}
-                              max={clip.assetDuration ?? 0}
-                              step={0.1}
-                              value={clip.trimStart}
-                              onChange={(e) => patchClipLocal(clip.clipId, { trimStart: Number(e.target.value) })}
-                              onBlur={() => commitClip(clip.clipId)}
-                              className="mt-1 w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-200"
-                            />
-                          </label>
-                          <label className="block">
-                            <span className="text-[11px] text-gray-400">截取结束（秒）</span>
-                            <input
-                              type="number"
-                              min={0}
-                              max={clip.assetDuration ?? 0}
-                              step={0.1}
-                              value={clip.trimEnd}
-                              onChange={(e) => patchClipLocal(clip.clipId, { trimEnd: Number(e.target.value) })}
-                              onBlur={() => commitClip(clip.clipId)}
-                              className="mt-1 w-full rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-gray-200"
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    ))}
+                    <div className=”flex items-center justify-center gap-3”>
+                      <button
+                        onClick={() => setCurrentTime(0)}
+                        className=”rounded-lg bg-gray-100 hover:bg-gray-200 px-3 py-2 text-xs transition-colors”
+                      >
+                        ⏮ 开始
+                      </button>
+                      <button
+                        onClick={() => setIsPlaying(!isPlaying)}
+                        className=”rounded-lg bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 text-sm font-medium transition-colors”
+                      >
+                        {isPlaying ? “⏸ 暂停” : “▶ 播放”}
+                      </button>
+                      <button
+                        onClick={() => setCurrentTime(totalDuration)}
+                        className=”rounded-lg bg-gray-100 hover:bg-gray-200 px-3 py-2 text-xs transition-colors”
+                      >
+                        ⏭ 结束
+                      </button>
+                    </div>
+
+                    <div className=”flex-1 overflow-hidden”>
+                      <VideoTimeline
+                        clips={activeProject.clips}
+                        currentTime={currentTime}
+                        onClipsChange={handleClipsChange}
+                        onCurrentTimeChange={setCurrentTime}
+                        pixelsPerSecond={PIXELS_PER_SECOND}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
