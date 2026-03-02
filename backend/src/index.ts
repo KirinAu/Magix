@@ -204,6 +204,27 @@ app.get("/api/users/:username/sessions", (req, res) => {
 });
 
 /**
+ * POST /api/users/:username/sessions
+ * 创建新会话（手动保存代码时使用）
+ */
+app.post("/api/users/:username/sessions", (req, res) => {
+  const { username } = req.params;
+  const { title, code, library } = req.body;
+
+  ensureUser(username);
+  const sessionId = uuidv4();
+  createSession(username, sessionId);
+  updateSession(username, sessionId, {
+    title: title || "未命名会话",
+    code: code || "",
+    library: library || "gsap",
+    videoPath: null,
+  });
+
+  res.json({ sessionId, username, title: title || "未命名会话" });
+});
+
+/**
  * GET /api/users/:username/sessions/:sessionId
  * 获取会话详情（含消息 + 最新渲染 job）
  */
