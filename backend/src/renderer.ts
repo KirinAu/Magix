@@ -26,8 +26,11 @@ export async function getBrowser(): Promise<Browser> {
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
-        "--disable-gpu",
         "--disable-dev-shm-usage",
+        "--enable-webgl",
+        "--ignore-gpu-blocklist",
+        "--use-angle=swiftshader",
+        "--enable-unsafe-swiftshader",
       ],
     });
   }
