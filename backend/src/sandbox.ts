@@ -100,7 +100,7 @@ const PIXI_CDN = `${GSAP_CDN}
 
 // Three.js：RAF 劫持已经处理 render loop，直接加载即可
 const THREE_CDN = `${GSAP_CDN}
-<script src="http://localhost:3001/libs/three.min.js"></script>`;
+<script src="https://me.stellaflux.cn/libs/three.min.js"></script>`;
 
 function detectLibrary(code: string): "gsap" | "anime" | "pixi" | "three" {
   if (code.includes("THREE") || code.includes("three.js")) return "three";
