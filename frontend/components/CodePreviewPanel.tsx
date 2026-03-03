@@ -51,10 +51,12 @@ const GSAP_CDN = scriptWithProbe("https://cdnjs.cloudflare.com/ajax/libs/gsap/3.
 const ANIME_CDN = scriptWithProbe("https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js", "anime");
 const PIXI_CDN = `${GSAP_CDN}${scriptWithProbe("https://cdn.jsdelivr.net/npm/pixi.js@7.4.2/dist/pixi.min.js", "pixi")}`;
 const THREE_CDN = (origin: string) => `${GSAP_CDN}${scriptWithProbe(`${origin}/libs/three.min.js`, "three_local")}${scriptWithProbe("https://unpkg.com/three@0.160.0/build/three.min.js", "three_cdn")}`;
+const ECHARTS_CDN = `${GSAP_CDN}${scriptWithProbe("https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js", "echarts")}`;
 
 function buildPreviewHtml(code: string, library: string, width: number, height: number): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const inferredLibrary = code.includes("THREE") ? "three"
+    : (code.includes("echarts") || code.includes("echarts.init")) ? "echarts"
     : code.includes("PIXI") ? "pixi"
     : (code.includes("anime(") || code.includes("anime.")) ? "anime"
     : library;
@@ -62,6 +64,7 @@ function buildPreviewHtml(code: string, library: string, width: number, height: 
   const libScript = inferredLibrary === "anime" ? ANIME_CDN
     : inferredLibrary === "pixi" ? PIXI_CDN
     : inferredLibrary === "three" ? THREE_CDN(origin)
+    : inferredLibrary === "echarts" ? ECHARTS_CDN
     : GSAP_CDN;
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8">

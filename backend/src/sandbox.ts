@@ -6,7 +6,7 @@
 export interface SandboxOptions {
   width: number;
   height: number;
-  library: "gsap" | "anime" | "pixi" | "three" | "auto";
+  library: "gsap" | "anime" | "pixi" | "three" | "echarts" | "auto";
 }
 
 const TIME_HIJACK_SCRIPT = `
@@ -102,8 +102,13 @@ const PIXI_CDN = `${GSAP_CDN}
 const THREE_CDN = `${GSAP_CDN}
 <script src="https://me.stellaflux.cn/libs/three.min.js"></script>`;
 
-function detectLibrary(code: string): "gsap" | "anime" | "pixi" | "three" {
+// ECharts：图表动画，RAF 劫持处理 seek
+const ECHARTS_CDN = `${GSAP_CDN}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>`;
+
+function detectLibrary(code: string): "gsap" | "anime" | "pixi" | "three" | "echarts" {
   if (code.includes("THREE") || code.includes("three.js")) return "three";
+  if (code.includes("echarts") || code.includes("echarts.init")) return "echarts";
   if (code.includes("PIXI") || code.includes("pixi")) return "pixi";
   if (code.includes("anime(") || code.includes("anime.")) return "anime";
   return "gsap";
@@ -114,6 +119,7 @@ export function buildSandboxHtml(userCode: string, options: SandboxOptions): str
   const libScript = lib === "anime" ? ANIME_CDN
     : lib === "pixi" ? PIXI_CDN
     : lib === "three" ? THREE_CDN
+    : lib === "echarts" ? ECHARTS_CDN
     : GSAP_CDN;
 
   return `<!DOCTYPE html>

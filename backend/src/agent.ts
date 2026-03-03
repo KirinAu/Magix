@@ -27,6 +27,7 @@ const SYSTEM_PROMPT = `You are an expert animation developer. Write high-quality
   - **Anime.js** (\`anime\`) — lightweight GSAP alternative.
   - **PixiJS** (\`PIXI\`) — WebGL 2D. Use for large particle systems (1000+), sprites, filters. GSAP also available.
   - **Three.js** (\`THREE\`) — 3D scenes, PBR materials, shaders. GSAP also available.
+  - **ECharts** (\`echarts\`) — data visualisation, animated charts (bar, line, pie, radar, graph, etc.). GSAP also available.
   - **Canvas 2D** — always available via \`document.createElement('canvas')\`.
 - No \`<script>\` tags, HTML, or import statements.
 - Canvas size: \`window.CANVAS_WIDTH\` / \`window.CANVAS_HEIGHT\`. Never hardcode absolute position/sizes! Use dynamic sizing.
@@ -37,6 +38,7 @@ const SYSTEM_PROMPT = `You are an expert animation developer. Write high-quality
 - **PixiJS**: \`new PIXI.Application({width, height, backgroundColor:0})\`, append \`app.view\`. Ticker is auto-stopped — drive properties via GSAP timelines.
 - **Three.js**: Use a RAF loop for rendering (intercepted for seek). **NEVER use \`gsap.ticker.add()\`** — it is not intercepted and produces black frames on export.
 - **Canvas 2D**: Use RAF loop.
+- **ECharts**: Create a \`<div>\` with CANVAS_WIDTH×CANVAS_HEIGHT, call \`echarts.init(div)\` → \`chart.setOption(...)\`. Use GSAP or RAF to animate option updates. Store instance on \`window.__echartsInstance\`.
 
 ## Cleanup (always first)
 \`\`\`js
@@ -44,6 +46,7 @@ gsap.killTweensOf("*"); gsap.globalTimeline.clear();
 if (window.__rafId) cancelAnimationFrame(window.__rafId);
 if (window.__pixiApp) { window.__pixiApp.destroy(true); window.__pixiApp = null; }
 if (window.__threeRenderer) { window.__threeRenderer.dispose(); window.__threeRenderer = null; }
+if (window.__echartsInstance) { window.__echartsInstance.dispose(); window.__echartsInstance = null; }
 document.querySelectorAll('canvas, .anim-el').forEach(el => el.remove());
 \`\`\`
 
@@ -186,9 +189,9 @@ export async function createAnimationAgent(
     description: "Commit JavaScript animation code and automatically validate it. Returns commit status + validation results (ok, errors, warnings) in one step.",
     parameters: Type.Object({
       code: Type.String({ description: "The complete JavaScript animation code to commit" }),
-      library: Type.Unsafe<"gsap" | "anime" | "pixi" | "three" | "canvas">({
+      library: Type.Unsafe<"gsap" | "anime" | "pixi" | "three" | "echarts" | "canvas">({
         type: "string",
-        enum: ["gsap", "anime", "pixi", "three", "canvas"],
+        enum: ["gsap", "anime", "pixi", "three", "echarts", "canvas"],
         description: "Which animation library this code uses",
       }),
       description: Type.String({ description: "Brief description of this committed code" }),
