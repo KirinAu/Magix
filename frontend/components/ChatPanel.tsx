@@ -31,6 +31,7 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
   const thinkingLogIdRef = useRef<string | null>(null);
   const thinkingTextRef = useRef<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [pendingImages, setPendingImages] = useState<Array<{ type: "base64"; mediaType: string; data: string; preview: string }>>([]);
   const mdClass = "prose prose-sm max-w-none text-gray-800 [&_*]:break-words";
@@ -324,7 +325,38 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
       results.push({ type: "base64", mediaType: file.type, data, preview });
     }
     setPendingImages((prev) => [...prev, ...results]);
+    // Reset file input so the same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      const dt = new DataTransfer();
+      imageFiles.forEach((f) => dt.items.add(f));
+      handleImageFiles(dt.files);
+    }
+  }
+
+  function autoResize() {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 150) + "px";
+  }
+
+  useEffect(() => {
+    autoResize();
+  }, [input]);
 
   return (
     <div className="flex flex-col h-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -456,12 +488,16 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
             </svg>
           </button>
 
-          <input
-            className="flex-1 rounded-xl bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-200"
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            className="flex-1 rounded-xl bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-gray-200 resize-none overflow-y-auto"
+            style={{ maxHeight: 150 }}
             placeholder={llmConfig ? "描述动画效果..." : "请先配置 LLM"}
             value={input}
             disabled={isStreaming || !llmConfig}
             onChange={(e) => setInput(e.target.value)}
+            onPaste={handlePaste}
             onCompositionStart={() => { isComposingRef.current = true; }}
             onCompositionEnd={() => { isComposingRef.current = false; }}
             onKeyDown={(e) => {
