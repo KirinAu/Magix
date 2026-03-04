@@ -26,3 +26,6 @@ backend/outputs/
 # TypeScript
 *.tsbuildinfo
 
+# Planning
+plan/
+

@@ -390,19 +390,19 @@ export default function ChatPanel({ onCodeUpdate, llmConfig, onLog, onLogAppend,
             ) : (
               <div className={`max-w-[92%] text-sm ${
                 msg.role === "user"
-                  ? "text-gray-900 text-right"
+                  ? "bg-[#2b2b2b] text-white px-4 py-2 rounded-[24px]"
                   : `text-gray-800 text-left text-justify ${mdClass}`
               }`}>
                 {msg.role === "user" ? (
                   <div className="space-y-2">
                     {msg.images && msg.images.length > 0 && (
-                      <div className="flex gap-1.5 flex-wrap">
+                      <div className="flex gap-1.5 flex-wrap mb-2">
                         {msg.images.map((src, i) => (
                           <img key={i} src={src} className="w-20 h-20 rounded-lg object-cover opacity-90" />
                         ))}
                       </div>
                     )}
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <p className="whitespace-pre-wrap text-left">{msg.content}</p>
                   </div>
                 ) : (
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
