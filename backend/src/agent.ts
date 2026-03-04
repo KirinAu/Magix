@@ -199,9 +199,20 @@ export async function createAnimationAgent(
       parts.push(`\nValidation — ok: ${validation.ok}`);
       if (validation.errors.length) parts.push(`errors:\n${validation.errors.map((e: string) => `  - ${e}`).join("\n")}`);
       if (validation.warnings.length) parts.push(`warnings:\n${validation.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
-      if (validation.ok && validation.warnings.length === 0) parts.push("TASK ALMOST COMPLETE: All checks passed. You MUST do one self-review pass (read_code, optional str_replace), then write final summary with estimated loop duration in seconds. DO NOT STOP.");
-      if (validation.ok && validation.warnings.length > 0) parts.push("TASK INCOMPLETE: ok=true but warnings exist. You MUST NOT STOP. Call read_code() then fix with str_replace.");
-      if (!validation.ok) parts.push("TASK INCOMPLETE: There are errors. You MUST NOT STOP. Call read_code() then fix with str_replace.");
+      
+      parts.push("\n---");
+      if (validation.ok && validation.warnings.length === 0) {
+        parts.push("✅ TASK ALMOST COMPLETE: All checks passed.");
+        parts.push("NEXT ACTION REQUIREMENTS:");
+        parts.push("1. Wait for user feedback. If the user explicitly asks for changes, you MUST read_code() first and fix.");
+        parts.push("2. If this was an autonomous loop and user hasn't intervened: perform a quick self-review, then produce the final summary text with estimated loop duration. DO NOT halt silently without a summary.");
+      } else {
+        parts.push("❌ TASK INCOMPLETE: Code has errors or warnings.");
+        parts.push("NEXT ACTION REQUIREMENTS:");
+        parts.push("1. DO NOT STOP. You MUST fix this autonomously unless the user explicitly told you to wait.");
+        parts.push("2. Call read_code() to grasp the context, then call str_replace() to fix it.");
+      }
+      
       const resultText = parts.join("\n");
 
       sendSSE(res, { type: "tool_result_debug", toolName: "commit_code", result: resultText });
@@ -214,18 +225,18 @@ export async function createAnimationAgent(
 
   const strReplaceTool: ToolDefinition<any> = {
     name: "str_replace",
-    label: "Edit Code",
-    description: "Replace an exact substring in the current code, then automatically validate. Returns edit status + validation results.",
+    label: "Edit Code (Human-in-the-Loop Safe)",
+    description: "Replace an exact substring in the current code, then automatically validate. IF the match fails, DO NOT guess — call read_code to get the exact lines to replace. Always include around 3 lines of surrounding preserved code in old_str to ensure uniqueness.",
     parameters: Type.Object({
-      old_str: Type.String({ description: "Exact string to find and replace (must be unique in the code)" }),
-      new_str: Type.String({ description: "Replacement string" }),
+      old_str: Type.String({ description: "Exact string to find and replace (MUST be strictly identical to the code. Include 2-3 surrounding unchanged lines to guarantee uniqueness!)" }),
+      new_str: Type.String({ description: "Replacement string, taking care to preserve the surrounding lines inherited from old_str" }),
       description: Type.String({ description: "Brief description of what this change does" }),
     }),
     execute: async (_toolCallId, params) => {
       if (!currentCode) throw new Error("No committed code exists yet. Use commit_code first.");
       const count = currentCode.split(params.old_str).length - 1;
-      if (count === 0) throw new Error(`old_str not found in current code. Make sure it matches exactly.`);
-      if (count > 1) throw new Error(`old_str matches ${count} times. Provide a more unique string.`);
+      if (count === 0) throw new Error(`old_str not found in current code.\nYour string:\n${params.old_str}\n\nACTION REQUIRED: Call read_code() immediately to verify the exact whitespace and structure of the code you want to change.`);
+      if (count > 1) throw new Error(`old_str matches ${count} times. You MUST provide more surrounding lines in old_str to make it unique.`);
       currentCode = currentCode.replace(params.old_str, params.new_str);
       sendSSE(res, { type: "code_update", code: currentCode, library: currentLibrary, mode: "patch" });
 
@@ -235,9 +246,14 @@ export async function createAnimationAgent(
       parts.push(`\nValidation — ok: ${validation.ok}`);
       if (validation.errors.length) parts.push(`errors:\n${validation.errors.map((e: string) => `  - ${e}`).join("\n")}`);
       if (validation.warnings.length) parts.push(`warnings:\n${validation.warnings.map((w: string) => `  - ${w}`).join("\n")}`);
-      if (validation.ok && validation.warnings.length === 0) parts.push("TASK ALMOST COMPLETE: All checks passed. You MUST do one self-review pass (read_code, optional str_replace), then write final summary with estimated loop duration in seconds. DO NOT STOP.");
-      if (validation.ok && validation.warnings.length > 0) parts.push("TASK INCOMPLETE: ok=true but warnings exist. You MUST NOT STOP. Call read_code() then fix with str_replace.");
-      if (!validation.ok) parts.push("TASK INCOMPLETE: There are errors. You MUST NOT STOP. Call read_code() then fix with str_replace.");
+      
+      parts.push("\n---");
+      if (validation.ok && validation.warnings.length === 0) {
+        parts.push("✅ HUMAN-IN-THE-LOOP CHECK: The edit is clean and valid. If you made this edit based on user feedback, stop and ask if they are satisfied. If this is an autonomous task, output your final summary.");
+      } else {
+        parts.push("❌ TASK INCOMPLETE: Edit caused new errors/warnings.");
+        parts.push("NEXT ACTION REQUIREMENTS: Call read_code() to grasp the context, then call str_replace() to fix it.");
+      }
       const strReplaceResult = parts.join("\n");
 
       sendSSE(res, { type: "tool_result_debug", toolName: "str_replace", result: strReplaceResult });
