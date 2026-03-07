@@ -51,6 +51,8 @@ const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "outputs");
 const OUTPUT_DIR = path.join(DATA_DIR, "outputs");
 const CONFIG_FILE = path.join(DATA_DIR, "llm_config.json");
 const PI_SESSION_DIR = path.join(DATA_DIR, "pi_sessions");
+const GEMINI_RELAY_BASE_URL = process.env.GEMINI_RELAY_BASE_URL?.replace(/\/+$/, "");
+const GEMINI_RELAY_API_KEY = process.env.GEMINI_RELAY_API_KEY;
 
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
@@ -97,6 +99,132 @@ function loadPersistedConfig(): LLMConfig | null {
     return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8")) as LLMConfig;
   } catch {
     return null;
+  }
+}
+
+function getGeminiUpstreamBaseUrl(): string {
+  if (GEMINI_RELAY_BASE_URL) return GEMINI_RELAY_BASE_URL;
+  const persisted = loadPersistedConfig();
+  if (persisted?.provider === "google" && persisted.baseUrl) {
+    return persisted.baseUrl.replace(/\/+$/, "");
+  }
+  return "https://generativelanguage.googleapis.com";
+}
+
+function getGeminiUpstreamApiKey(req: express.Request): string | undefined {
+  const queryKey = typeof req.query.key === "string" ? req.query.key : undefined;
+  const headerKey = req.header("x-goog-api-key") || undefined;
+  if (queryKey) return queryKey;
+  if (headerKey) return headerKey;
+  if (GEMINI_RELAY_API_KEY) return GEMINI_RELAY_API_KEY;
+  const persisted = loadPersistedConfig();
+  if (persisted?.provider === "google" && persisted.apiKey) return persisted.apiKey;
+  return undefined;
+}
+
+function validateGeminiGenerateContentBody(body: any): string | null {
+  if (!body || typeof body !== "object") return "request body must be a JSON object";
+  if (!Array.isArray(body.contents)) return "contents must be an array";
+
+  for (const content of body.contents) {
+    if (!content || typeof content !== "object") return "each contents item must be an object";
+    if (!Array.isArray(content.parts)) return "each contents item must include parts array";
+
+    for (const part of content.parts) {
+      if (!part || typeof part !== "object") return "each part must be an object";
+      if (part.fileData) {
+        return "fileData.fileUri and File API are not supported; use inlineData base64 instead";
+      }
+      if (!part.inlineData) continue;
+
+      const { mimeType, data } = part.inlineData;
+      if (!mimeType || typeof mimeType !== "string") {
+        return "inlineData.mimeType is required";
+      }
+      if (!data || typeof data !== "string") {
+        return "inlineData.data is required and must be base64";
+      }
+
+      const allowed = mimeType.startsWith("image/")
+        || mimeType === "application/pdf"
+        || mimeType.startsWith("audio/")
+        || mimeType.startsWith("video/");
+      if (!allowed) {
+        return `unsupported inlineData.mimeType: ${mimeType}`;
+      }
+    }
+  }
+
+  return null;
+}
+
+async function proxyGeminiRequest(req: express.Request, res: express.Response, model: string, action: "generateContent" | "streamGenerateContent") {
+  const error = validateGeminiGenerateContentBody(req.body);
+  if (error) {
+    res.status(400).json({ error });
+    return;
+  }
+
+  const upstreamBaseUrl = getGeminiUpstreamBaseUrl();
+  const apiKey = getGeminiUpstreamApiKey(req);
+  const upstreamUrl = new URL(`${upstreamBaseUrl}/v1beta/models/${encodeURIComponent(model)}:${action}`);
+
+  for (const [key, value] of Object.entries(req.query)) {
+    if (value == null) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) upstreamUrl.searchParams.append(key, String(item));
+    } else {
+      upstreamUrl.searchParams.set(key, String(value));
+    }
+  }
+  if (apiKey && !upstreamUrl.searchParams.has("key")) {
+    upstreamUrl.searchParams.set("key", apiKey);
+  }
+
+  const headers = new Headers();
+  req.headers && Object.entries(req.headers).forEach(([key, value]) => {
+    if (!value) return;
+    const lower = key.toLowerCase();
+    if (["host", "connection", "content-length", "x-goog-api-key"].includes(lower)) return;
+    if (Array.isArray(value)) {
+      headers.set(key, value.join(", "));
+      return;
+    }
+    headers.set(key, value);
+  });
+  headers.set("Content-Type", "application/json");
+
+  const upstream = await fetch(upstreamUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(req.body),
+  });
+
+  res.status(upstream.status);
+  upstream.headers.forEach((value, key) => {
+    if (["content-length", "transfer-encoding", "connection"].includes(key.toLowerCase())) return;
+    res.setHeader(key, value);
+  });
+
+  if (action === "streamGenerateContent") {
+    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("Cache-Control", "no-cache");
+  }
+
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+
+  const reader = upstream.body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) res.write(Buffer.from(value));
+    }
+  } finally {
+    res.end();
   }
 }
 
@@ -173,6 +301,27 @@ app.put("/api/config", (req, res) => {
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post(/^\/v1beta\/models\/([^/]+):(generateContent|streamGenerateContent)$/, async (req, res) => {
+  const match = req.path.match(/^\/v1beta\/models\/([^/]+):(generateContent|streamGenerateContent)$/);
+  const model = match?.[1];
+  const action = match?.[2] as "generateContent" | "streamGenerateContent" | undefined;
+
+  if (!model || !action) {
+    res.status(404).json({ error: "Route not found" });
+    return;
+  }
+
+  try {
+    await proxyGeminiRequest(req, res, model, action);
+  } catch (err: any) {
+    if (!res.headersSent) {
+      res.status(502).json({ error: err?.message || "Gemini relay request failed" });
+      return;
+    }
+    if (!res.writableEnded) res.end();
   }
 });
 
